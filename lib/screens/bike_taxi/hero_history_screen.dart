@@ -154,10 +154,10 @@ class _HeroHistoryScreenState extends State<HeroHistoryScreen>
   // has one (rides' query has no status filter and relies on that
   // check instead).
   List<_HeroHistoryItem> _mapServiceRequestSnapshot(
-      QuerySnapshot<Map<String, dynamic>> snap) {
+      QuerySnapshot<Map<String, dynamic>> snap,) {
     return snap.docs
         .map((doc) =>
-            _HeroHistoryItem.fromServiceRequest(doc.id, doc.data(), _extractWhen))
+            _HeroHistoryItem.fromServiceRequest(doc.id, doc.data(), _extractWhen),)
         .toList();
   }
 
@@ -706,7 +706,7 @@ class _HeroHistoryItem {
       paymentStatus: (data['paymentStatus'] as String? ?? '').trim(),
       paymentDispute: false,
       amount: finalAmount,
-      tip: 0.0,
+      tip: 0,
       netEarnings: finalAmount,
       when: whenReader(data) ?? DateTime.fromMillisecondsSinceEpoch(0),
     );

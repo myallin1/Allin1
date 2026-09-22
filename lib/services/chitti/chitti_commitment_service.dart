@@ -143,7 +143,7 @@ class Commitment {
         ),
         createdAt: DateTime.fromMillisecondsSinceEpoch(
             (m['createdAt'] as num?)?.toInt() ??
-                DateTime.now().millisecondsSinceEpoch),
+                DateTime.now().millisecondsSinceEpoch,),
         note: (m['note'] as String?) ?? '',
         timesAsked: (m['timesAsked'] as num?)?.toInt() ?? 0,
         lastAskedAt:
@@ -215,7 +215,7 @@ class ChittiCommitmentService extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-          _prefsKey, jsonEncode(_items.map((c) => c.toJson()).toList()));
+          _prefsKey, jsonEncode(_items.map((c) => c.toJson()).toList()),);
     } catch (_) {
       // Nothing useful to do here — the in-memory list is still right
       // for this session, and the next successful write re-syncs it.
@@ -290,7 +290,7 @@ class ChittiCommitmentService extends ChangeNotifier {
   }
 
   Future<void> _update(
-      String id, Commitment Function(Commitment) transform) async {
+      String id, Commitment Function(Commitment) transform,) async {
     await load();
     _items = _items.map((c) => c.id == id ? transform(c) : c).toList();
     await _persist();
@@ -346,7 +346,7 @@ class ChittiCommitmentService extends ChangeNotifier {
   /// saying — silence is a valid answer and better than "you have 0
   /// tasks today, boss".
   static String morningSummary(List<Commitment> items,
-      {String languageCode = 'ta'}) {
+      {String languageCode = 'ta',}) {
     if (items.isEmpty) return '';
     final n = items.length;
     final first = items.first.what;

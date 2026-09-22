@@ -21,7 +21,7 @@ import 'package:image/image.dart' as img;
 import '../services/auth_service.dart';
 import '../services/cloudinary_upload_service.dart';
 import '../services/custom_hotel_service.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../widgets/cached_cloud_image.dart';
 
 const Color _bg = Color(0xFFF7FAF8);
 const Color _surface = Color(0xFFFFFFFF);
@@ -95,7 +95,7 @@ class _SellerCustomHotelBuilderScreenState extends State<SellerCustomHotelBuilde
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: _teal,
-        onPressed: () => _openItemEditor(),
+        onPressed: _openItemEditor,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Add Item', style: TextStyle(color: Colors.white)),
       ),
@@ -119,7 +119,7 @@ class _SellerCustomHotelBuilderScreenState extends State<SellerCustomHotelBuilde
                 child: Row(
                   children: [
                     Icon(isOpen ? Icons.storefront_rounded : Icons.storefront_outlined,
-                        color: isOpen ? _tealLight : _muted),
+                        color: isOpen ? _tealLight : _muted,),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -203,7 +203,6 @@ class _ItemCard extends StatelessWidget {
                     CloudinaryUploadService.optimizedUrl(item.photoUrl, width: 112),
                     width: 56,
                     height: 56,
-                    fit: BoxFit.cover,
                   ),
           ),
           const SizedBox(width: 12),
@@ -214,12 +213,12 @@ class _ItemCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(item.name.isEmpty ? '(untitled)' : item.name,
-                      style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13.5)),
+                      style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 13.5),),
                   const SizedBox(height: 2),
                   Text('₹${item.price.toStringAsFixed(0)}', style: GoogleFonts.outfit(color: _tealLight, fontSize: 12)),
                   if (item.description.isNotEmpty)
                     Text(item.description,
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(color: _muted, fontSize: 11),),
                 ],
               ),
             ),
@@ -375,7 +374,7 @@ class _ItemEditorSheetState extends State<_ItemEditorSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(widget.existing == null ? 'Add Item' : 'Edit Item',
-                style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16)),
+                style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16),),
             const SizedBox(height: 14),
             GestureDetector(
               onTap: _pickPhoto,
@@ -388,7 +387,6 @@ class _ItemEditorSheetState extends State<_ItemEditorSheet> {
                             CloudinaryUploadService.optimizedUrl(_photoUrl, width: 800),
                             width: double.infinity,
                             height: 140,
-                            fit: BoxFit.cover,
                           )
                         : Container(
                             width: double.infinity,
@@ -443,4 +441,3 @@ class _ItemEditorSheetState extends State<_ItemEditorSheet> {
     );
   }
 }
-

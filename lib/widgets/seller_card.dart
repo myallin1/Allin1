@@ -16,7 +16,6 @@ import 'cached_cloud_image.dart';
 // ── Brand palette (Aug 20 2026 — Global Food Theme Overhaul) ───────
 // Shop cards were dark (0xFF1A1A2A) — recolored for the white/pink
 // category screen; food accent switched from red to hot pink.
-const Color _kPink = Color(0xFFFF4FA3);
 const Color _kSurface = Color(0xFFF8F8FF);
 const Color _kText = Color(0xFF1A1A2E);
 const Color _kMuted = Color(0xFF9999BB);
@@ -243,7 +242,7 @@ class SellerCard extends StatelessWidget {
   // reference, reimplemented in our own pink/white brand rather than
   // copied) ───────────────────────────────────────────────────────
   Widget _buildPhotoCard(BuildContext context, _SellerCardConfig config,
-      bool isOpen, String metadata, String photoUrl) {
+      bool isOpen, String metadata, String photoUrl,) {
     return GestureDetector(
       onTap: () => _handleTap(context),
       child: Container(
@@ -271,7 +270,6 @@ class SellerCard extends StatelessWidget {
                   photoUrl,
                   width: double.infinity,
                   height: 140,
-                  fit: BoxFit.cover,
                   cacheWidth: 480,
                   errorWidget: Container(
                     width: double.infinity,
@@ -279,7 +277,7 @@ class SellerCard extends StatelessWidget {
                     color: config.primaryColor.withValues(alpha: 0.1),
                     child: Center(
                       child: Text(_getShopEmoji(),
-                          style: const TextStyle(fontSize: 40)),
+                          style: const TextStyle(fontSize: 40),),
                     ),
                   ),
                 ),
@@ -315,11 +313,11 @@ class SellerCard extends StatelessWidget {
                         style: GoogleFonts.outfit(
                             fontSize: 12,
                             color: _kText,
-                            fontWeight: FontWeight.w600),
+                            fontWeight: FontWeight.w600,),
                       ),
                       const SizedBox(width: 8),
                       const Text('•',
-                          style: TextStyle(fontSize: 12, color: _kMuted)),
+                          style: TextStyle(fontSize: 12, color: _kMuted),),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(

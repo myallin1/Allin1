@@ -30,10 +30,10 @@ import '../models/gift_coupon_model.dart';
 import '../models/service_request_model.dart';
 import '../services/chitti_order_memory_service.dart';
 import '../services/chitti_overlay_service.dart';
+import '../services/firestore_usage_tracking.dart';
 import '../services/gift_coupon_service.dart';
 import '../widgets/animated_meter_fare.dart';
 import '../widgets/rating_feedback_sheet.dart';
-import '../services/firestore_usage_tracking.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kBg = Color(0xFFFFFFFF);
@@ -218,7 +218,7 @@ class _ServiceRequestPaymentScreenState
             unawaited(ChittiOrderMemoryService.record(
               service: _memoryServiceKeyFor(request.requestType),
               summary: _memorySummaryFor(request),
-            ));
+            ),);
             // FIX (Aug 25 2026 — "Chitti never dances"): food/grocery
             // half of wiring up completeService(), which existed since
             // Aug 19 2026 but was never called anywhere — see
@@ -405,7 +405,7 @@ class _CouponPickerSheet extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Text(
-                        "No gift coupons ready to use. Scratch one open in "
+                        'No gift coupons ready to use. Scratch one open in '
                         'Rewards first — you earn one each time you pay for '
                         'a service.',
                         style: GoogleFonts.outfit(color: _kMuted, fontSize: 13),),

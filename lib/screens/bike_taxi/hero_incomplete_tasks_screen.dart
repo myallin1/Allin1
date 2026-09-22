@@ -39,11 +39,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/ride_model.dart';
+import '../../services/firestore_usage_tracking.dart';
 import '../../services/hero_task_recovery_service.dart';
 import '../../services/service_request_service.dart';
 import 'hero_home_screen.dart' show HeroTaskDetailScreen;
 import 'hero_ride_screen.dart';
-import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFFFFF7FB);
 const Color _card = Colors.white;
@@ -225,7 +225,7 @@ class _HeroIncompleteTasksScreenState
           const Icon(Icons.check_circle_rounded, color: _green, size: 18),
           const SizedBox(width: 8),
           Text(label,
-              style: GoogleFonts.outfit(color: _muted, fontSize: 12.5)),
+              style: GoogleFonts.outfit(color: _muted, fontSize: 12.5),),
         ],
       ),
     );

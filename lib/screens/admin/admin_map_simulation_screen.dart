@@ -86,7 +86,7 @@ class _AdminMapSimulationScreenState extends State<AdminMapSimulationScreen> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: _card, border: Border(bottom: BorderSide(color: _border))),
+              decoration: const BoxDecoration(color: _card, border: Border(bottom: BorderSide(color: _border))),
               child: const Text(
                 'This map is 100% fake, generated on-device with zero network calls. It exists only to stress-test '
                 'rendering performance with 40 moving markers. It is never shown to customers, heroes, or investors — '
@@ -102,7 +102,6 @@ class _AdminMapSimulationScreenState extends State<AdminMapSimulationScreen> {
                     children: [
                       Allin1MapWidget(
                         markers: _sim.simulatedMarkers,
-                        interactive: true,
                       ),
                       // Second, always-on-top watermark so it survives
                       // even if someone screenshots just the map area.
@@ -133,7 +132,7 @@ class _AdminMapSimulationScreenState extends State<AdminMapSimulationScreen> {
             ),
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: _card, border: Border(top: BorderSide(color: _border))),
+              decoration: const BoxDecoration(color: _card, border: Border(top: BorderSide(color: _border))),
               child: ListenableBuilder(
                 listenable: _sim,
                 builder: (context, _) {
@@ -158,7 +157,7 @@ class _AdminMapSimulationScreenState extends State<AdminMapSimulationScreen> {
                                 ButtonSegment(value: SimulationDensity.peak, label: Text('Peak', style: TextStyle(fontSize: 12))),
                               ],
                               selected: {_sim.currentDensity},
-                              onSelectionChanged: (Set<SimulationDensity> newSelection) {
+                              onSelectionChanged: (newSelection) {
                                 final density = newSelection.first;
                                 // If already active, restart with new density automatically
                                 if (_sim.isActive) {

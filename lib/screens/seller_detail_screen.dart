@@ -18,6 +18,7 @@ import '../services/auth_prompt_service.dart';
 import '../services/auth_service.dart';
 import '../services/cart_service.dart';
 import '../services/category_gateway_service.dart';
+import '../services/hive_cache.dart';
 import '../services/service_request_service.dart';
 import '../services/theme_service.dart';
 import '../widgets/cached_cloud_image.dart';
@@ -128,7 +129,7 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
     _cartSub = _cart.cartStream.listen((items) {
       if (mounted) {
         setState(() {
-          _cartItemCount = items.fold(0, (sum, item) => sum + item.quantity);
+          _cartItemCount = items.fold(0, (acc, item) => acc + item.quantity);
         });
       }
     });
@@ -175,25 +176,46 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
       // deliberately best-effort — a failure here must never break the
       // main menu load below.
       try {
-        final hotelSnap = await FirebaseFirestore.instance
-            .collection('custom_hotels')
-            .doc(sellerId)
-            .get();
-        if (hotelSnap.exists) {
-          final visibleItems = await FirebaseFirestore.instance
-              .collection('custom_hotels')
-              .doc(sellerId)
-              .collection('items')
-              .where('isVisible', isEqualTo: true)
-              .limit(1)
-              .get();
-          if (visibleItems.docs.isNotEmpty && mounted) {
+        final cacheKey = 'custom_menu_probe_$sellerId';
+        final cachedProbe = await HiveCache.get<Map<dynamic, dynamic>>(cacheKey);
+        if (cachedProbe != null) {
+          if (cachedProbe['hasMenu'] == true && mounted) {
             setState(() {
               _hasCustomMenu = true;
-              _customHotelName =
-                  (hotelSnap.data()?['hotelName'] as String?)?.trim() ?? '';
+              _customHotelName = (cachedProbe['name'] as String?) ?? '';
             });
           }
+        } else {
+          final hotelSnap = await FirebaseFirestore.instance
+              .collection('custom_hotels')
+              .doc(sellerId)
+              .get();
+          bool hasMenu = false;
+          String hotelName = '';
+          if (hotelSnap.exists) {
+            final visibleItems = await FirebaseFirestore.instance
+                .collection('custom_hotels')
+                .doc(sellerId)
+                .collection('items')
+                .where('isVisible', isEqualTo: true)
+                .limit(1)
+                .get();
+            if (visibleItems.docs.isNotEmpty) {
+              hasMenu = true;
+              hotelName =
+                  (hotelSnap.data()?['hotelName'] as String?)?.trim() ?? '';
+              if (mounted) {
+                setState(() {
+                  _hasCustomMenu = true;
+                  _customHotelName = hotelName;
+                });
+              }
+            }
+          }
+          unawaited(HiveCache.put(cacheKey, {
+            'hasMenu': hasMenu,
+            'name': hotelName,
+          }, ttl: const Duration(hours: 1)),);
         }
       } catch (e) {
         debugPrint('[SellerDetailScreen] custom-menu probe skipped: $e');
@@ -498,13 +520,12 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
                     if (iconTheme == 'photo_realistic') {
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: CachedCloudImage(
+                        child: const CachedCloudImage(
                           'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=200&q=80',
                           width: 26,
                           height: 26,
-                          fit: BoxFit.cover,
                           cacheWidth: 104,
-                          errorWidget: const Icon(Icons.storefront_rounded, color: Colors.white, size: 26),
+                          errorWidget: Icon(Icons.storefront_rounded, color: Colors.white, size: 26),
                         ),
                       );
                     }
@@ -798,13 +819,12 @@ class _SellerDetailScreenState extends State<SellerDetailScreen> {
                 if (iconTheme == 'photo_realistic') {
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: CachedCloudImage(
+                    child: const CachedCloudImage(
                       'https://images.unsplash.com/photo-1607166452427-7e4477079cb9?w=200&q=80',
                       width: 64,
                       height: 64,
-                      fit: BoxFit.cover,
                       cacheWidth: 256,
-                      errorWidget: const Text('📦', style: TextStyle(fontSize: 48)),
+                      errorWidget: Text('📦', style: TextStyle(fontSize: 48)),
                     ),
                   );
                 }
@@ -992,7 +1012,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
               'name': item.name,
               'quantity': item.quantity,
               'total': item.total,
-            })
+            },)
         .toList();
     final checkoutResult = await Navigator.push<FoodCheckoutResult>(
       context,
@@ -1033,12 +1053,12 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
         if (!sellerSnap.exists) {
           throw Exception('This shop is no longer available.');
         }
-        final sellerData = sellerSnap.data()! as Map<String, dynamic>;
+        final sellerData = sellerSnap.data()!;
         final sellerStatus = sellerData['status'] as String? ?? 'active';
         final sellerIsOpen = sellerData['isOpen'] as bool? ?? true;
         if (sellerStatus != 'active' || !sellerIsOpen) {
           throw Exception(
-              "This shop just closed and can't accept new orders right now.");
+              "This shop just closed and can't accept new orders right now.",);
         }
 
         // Read phase
@@ -1069,7 +1089,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
         
         // Validation phase
         for (final item in cart.items) {
-          final data = itemDocs[item.id]!.data() as Map<String, dynamic>;
+          final data = itemDocs[item.id]!.data()! as Map<String, dynamic>;
           final isAvailable = data['isAvailable'] as bool? ?? true;
           final stockQuantity = (data['stockQuantity'] as num?)?.toInt();
 
@@ -1117,7 +1137,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                 'price': item.price,
                 'quantity': item.quantity,
                 'total': item.total,
-              })
+              },)
           .toList();
 
       // customerPhone/customerName now come from the checkout form the
@@ -1277,23 +1297,22 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                                 if (iconTheme == 'photo_realistic') {
                                   return ClipRRect(
                                     borderRadius: BorderRadius.circular(10),
-                                    child: CachedCloudImage(
+                                    child: const CachedCloudImage(
                                       'https://images.unsplash.com/photo-1584473457406-6240486418e9?w=200&q=80',
                                       width: 56,
                                       height: 56,
-                                      fit: BoxFit.cover,
                                       cacheWidth: 224,
-                                      errorWidget: const Icon(
+                                      errorWidget: Icon(
                                           Icons.shopping_cart_outlined,
                                           size: 48,
-                                          color: _kMuted),
+                                          color: _kMuted,),
                                     ),
                                   );
                                 }
                                 final isPink = iconTheme == 'pink_white_3d';
                                 if (!isPink) {
                                   return const Icon(Icons.shopping_cart_outlined,
-                                      size: 48, color: _kMuted);
+                                      size: 48, color: _kMuted,);
                                 }
                                 return Image.asset(
                                   'assets/images/pink_icons/food_3_a.webp',
@@ -1303,7 +1322,7 @@ class _CartBottomSheetState extends State<_CartBottomSheet> {
                                   errorBuilder: (_, __, ___) => const Icon(
                                       Icons.shopping_cart_outlined,
                                       size: 48,
-                                      color: _kMuted),
+                                      color: _kMuted,),
                                 );
                               },
                             ),

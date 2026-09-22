@@ -120,7 +120,7 @@ class AuthPromptService {
 
   static final AuthPromptService instance = AuthPromptService._();
 
-  static const Duration _delay = Duration(seconds: 30);
+  static const Duration _delay = Duration(seconds: 20);
 
   /// SharedPreferences key holding the ms-since-epoch of the last
   /// dismissal. Someone who tapped "Later" must not be asked again on

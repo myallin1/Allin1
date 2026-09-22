@@ -250,7 +250,7 @@ class CredentialCacheService {
   // ================================================================
 
   /// Set online status (called by network listener)
-  void setOnlineStatus(bool isOnline) {
+  void setOnlineStatus({required bool isOnline}) {
     if (_isOnline != isOnline) {
       _isOnline = isOnline;
       _connectivityController.add(_isOnline);

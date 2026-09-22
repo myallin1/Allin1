@@ -319,6 +319,7 @@ class OlaMapsProvider extends MapProvider {
     return null;
   }
 
+
   List<Map<String, dynamic>> _dedupeResults(
     List<Map<String, dynamic>> results,
   ) {

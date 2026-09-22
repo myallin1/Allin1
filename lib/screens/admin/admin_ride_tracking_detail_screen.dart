@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../widgets/allin1_map_widget.dart';
 import '../../services/firestore_usage_tracking.dart';
+import '../../widgets/allin1_map_widget.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);

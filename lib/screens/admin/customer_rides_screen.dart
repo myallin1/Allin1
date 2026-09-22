@@ -194,7 +194,7 @@ class _CustomerRidesScreenState extends State<CustomerRidesScreen> {
             final actualFare = (rd['actualFare'] as num?)?.toDouble();
             final tipAmount = (rd['tipAmount'] as num?)?.toDouble();
             final estFare = (rd['fare'] as num?)?.toDouble();
-            return s + (finalFare ?? ((actualFare ?? 0) + (tipAmount ?? 0)) ?? estFare ?? 0.0);
+            return s + (finalFare ?? (actualFare != null ? actualFare + (tipAmount ?? 0) : (estFare ?? 0.0)));
           },
         );
         final completed = rides

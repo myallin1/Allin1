@@ -25,6 +25,9 @@ import '../services/app_minimizer_service.dart';
 import '../services/app_update_checker.dart';
 // GUEST MODE (Aug 11 2026): the 30s deferred sign-in nudge.
 import '../services/auth_prompt_service.dart';
+// GUEST MODE: sign-in shortcut chip in AppBar — same sheet, voluntary tap.
+import '../widgets/auth/auth_gate_sheet.dart';
+import '../services/auth_service.dart';
 import '../services/chitti/chitti_screen_tracker.dart';
 import '../services/chitti_nudge_service.dart';
 import '../services/chitti_order_memory_service.dart';
@@ -210,6 +213,11 @@ class _DashboardScreenState extends State<DashboardScreen>
       final cachedName = (cached?['name'] as String?)?.trim();
       if (cachedName != null && cachedName.isNotEmpty && mounted) {
         setState(() => _resolvedName = cachedName);
+      }
+      // If Hive cache is fresh (<30 mins TTL), skip the network read to prevent DB consumption.
+      final isFresh = await HiveCache.isFresh(HiveCache.kUserProfile);
+      if (isFresh && cachedName != null && cachedName.isNotEmpty) {
+        return;
       }
       // Always refresh in the background — cheap single .get(), and it
       // is what keeps a just-edited name from going stale until the
@@ -1260,6 +1268,49 @@ class _DashboardScreenState extends State<DashboardScreen>
                 unawaited(_applyNativeAppUpdate(context));
               }
             },
+          ),
+        // GUEST MODE SIGN-IN SHORTCUT (Sep 2026)
+        // Visible ONLY when the customer is a guest (anonymous / not yet
+        // signed in). Taps open the same showAuthGateSheet used everywhere
+        // else — no second auth path is introduced. Auto-hides the moment
+        // the customer signs in (AuthService().isRealUser flips to true
+        // and the next rebuild drops this widget from the tree entirely).
+        // Zero disruption: sits between the update button and the wallet
+        // chip; no existing widget is moved, resized or removed.
+        if (!AuthService().isRealUser)
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: GestureDetector(
+              onTap: () => unawaited(
+                showAuthGateSheet(
+                  context,
+                  reason: 'Sign in to track orders, earn coins & book faster',
+                  showLaterButton: true,
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: kPink,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.person_rounded, size: 13, color: Colors.white),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Sign In',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

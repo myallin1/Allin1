@@ -24,10 +24,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/firestore_usage_tracking.dart';
 import '../services/service_request_service.dart';
 import '../services/theme_context_extensions.dart';
 import 'hero_booking_tracking_screen.dart';
-import '../services/firestore_usage_tracking.dart';
 
 class HeroSearchRadarScreen extends StatefulWidget {
   final String requestId;
@@ -427,8 +427,7 @@ class _RadarPainter extends CustomPainter {
 
     final sweepPaint = Paint()
       ..shader = SweepGradient(
-        colors: [color.withValues(alpha: 0.0), color.withValues(alpha: 0.35)],
-        startAngle: 0,
+        colors: [color.withValues(alpha: 0), color.withValues(alpha: 0.35)],
         endAngle: pi / 2,
         transform: GradientRotation(progress * 2 * pi),
       ).createShader(Rect.fromCircle(center: center, radius: maxRadius));

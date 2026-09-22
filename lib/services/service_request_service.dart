@@ -16,14 +16,14 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:geolocator/geolocator.dart';
 
 import '../config/city_config.dart';
+import '../config/hero_service_access.dart';
+import '../config/hero_skill_catalog.dart';
 import '../models/service_request_model.dart';
+import './firestore_usage_tracking.dart';
 import 'city_service.dart';
 import 'hero_usage_accumulator_service.dart';
 import 'hero_wallet_service.dart';
 import 'usage_tracking_service.dart';
-import '../config/hero_service_access.dart';
-import '../config/hero_skill_catalog.dart';
-import './firestore_usage_tracking.dart';
 
 /// Canonical status enum — the single source of truth for lifecycle state.
 /// UI label sets (task-type vs goods-type) are presentation-only mappings
@@ -305,7 +305,8 @@ class ServiceRequestService {
       final items = details['items'];
       final itemsSummary = items is List
           ? items
-              .whereType<Map>()
+              .whereType<Map<dynamic, dynamic>>()
+
               .take(3)
               .map((it) => '${it['quantity'] ?? it['qty'] ?? 1} × ${it['name'] ?? 'Item'}')
               .join(', ')
@@ -1006,7 +1007,10 @@ class ServiceRequestService {
   /// adminAssignHero() and should never actually reach this branch in
   /// normal operation.
   Future<void> advanceStatus(String requestId, String newStatus) async {
-    assert(kServiceRequestStatuses.contains(newStatus));
+    assert(
+      kServiceRequestStatuses.contains(newStatus),
+      'Invalid status: $newStatus',
+    );
 
     if (newStatus == 'completed') {
       final timelineFields =
@@ -1015,7 +1019,7 @@ class ServiceRequestService {
         'status': newStatus,
         'updatedAt': FieldValue.serverTimestamp(),
         ...timelineFields,
-      });
+      },);
       return;
     }
 
@@ -1165,7 +1169,7 @@ class ServiceRequestService {
       'paymentStatus': 'pending_collection',
       'updatedAt': FieldValue.serverTimestamp(),
       ...timelineFields,
-    });
+    },);
   }
 
   /// Customer-side: marks a completed service request as paid. This is

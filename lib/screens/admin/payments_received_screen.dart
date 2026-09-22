@@ -134,7 +134,7 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
         })
         .toList()
       ..sort((a, b) => ((b[tsField] as num?) ?? 0)
-          .compareTo((a[tsField] as num?) ?? 0));
+          .compareTo((a[tsField] as num?) ?? 0),);
   }
 
   @override
@@ -227,7 +227,7 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
                       Text(
                         '${docs.length} collections',
                         style: GoogleFonts.outfit(
-                            color: _muted, fontWeight: FontWeight.w600),
+                            color: _muted, fontWeight: FontWeight.w600,),
                       ),
                       Text(
                         'Total collected • ${_range.label}',
@@ -271,11 +271,11 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                data['heroName']?.toString().isNotEmpty == true
+                                data['heroName']?.toString().isNotEmpty ?? false
                                     ? data['heroName'].toString()
                                     : 'Hero ${data['heroId']}',
                                 style: GoogleFonts.outfit(
-                                    color: _text, fontWeight: FontWeight.w700),
+                                    color: _text, fontWeight: FontWeight.w700,),
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -290,7 +290,7 @@ class _PaymentsReceivedScreenState extends State<PaymentsReceivedScreen>
                         Text(
                           '₹${(data['amount'] as num?)?.toStringAsFixed(0) ?? '0'}',
                           style: GoogleFonts.outfit(
-                              color: _gold, fontWeight: FontWeight.w800),
+                              color: _gold, fontWeight: FontWeight.w800,),
                         ),
                         const SizedBox(width: 10),
                         if (!verified)

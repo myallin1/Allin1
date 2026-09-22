@@ -77,8 +77,7 @@ class ServiceRequestLineItem {
   final num? price;
 
   const ServiceRequestLineItem({
-    this.sNo,
-    required this.name,
+    required this.name, this.sNo,
     this.qty,
     this.quantity,
     this.price,
@@ -251,7 +250,7 @@ class ServiceRequestModel {
   /// Local-cache constructor — `json` is whatever this model's own
   /// [toJson] previously wrote to Hive/Isar/disk (dates are ISO-8601
   /// Strings here, not Timestamps). Uses the exact same parsing logic
-  /// as [fromFirestore] via [parseFlexibleTimestamp], so one code path
+  /// as [fromFirestore] via `parseFlexibleTimestamp`, so one code path
   /// safely handles both sources.
   factory ServiceRequestModel.fromJson(Map<String, dynamic> json) {
     return ServiceRequestModel._fromMap(
@@ -260,7 +259,7 @@ class ServiceRequestModel {
     );
   }
 
-  static ServiceRequestModel _fromMap(Map<String, dynamic> map, String id) {
+  factory ServiceRequestModel._fromMap(Map<String, dynamic> map, String id) {
     final details = (map['details'] is Map)
         ? Map<String, dynamic>.from(map['details'] as Map)
         : <String, dynamic>{};

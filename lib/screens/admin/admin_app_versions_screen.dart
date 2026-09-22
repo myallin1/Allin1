@@ -22,9 +22,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import '../../services/app_update_checker.dart';
 
 import '../../services/app_changelog_service.dart';
+import '../../services/app_update_checker.dart';
 import '../../services/chitti/chitti_dev_monitor_service.dart';
 import 'admin_whats_new_sheet.dart';
 
@@ -36,7 +36,7 @@ const Color _purple = Color(0xFFB21FFF);
 const Color _green = Color(0xFF4ADE80);
 
 class AdminAppVersionsScreen extends StatefulWidget {
-  const AdminAppVersionsScreen({super.key, required this.release});
+  const AdminAppVersionsScreen({required this.release, super.key});
 
   final DevRelease release;
 
@@ -127,7 +127,7 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
         title: Text(
           'App versions',
           style: GoogleFonts.outfit(
-              color: _text, fontWeight: FontWeight.w700, fontSize: 16),
+              color: _text, fontWeight: FontWeight.w700, fontSize: 16,),
         ),
       ),
       body: Column(
@@ -144,12 +144,12 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Currently installed',
-                    style: GoogleFonts.outfit(color: _muted, fontSize: 12)),
+                    style: GoogleFonts.outfit(color: _muted, fontSize: 12),),
                 const SizedBox(height: 4),
                 Text(
                   _installedVersion ?? 'Checking…',
                   style: GoogleFonts.outfit(
-                      color: _text, fontSize: 16, fontWeight: FontWeight.w700),
+                      color: _text, fontSize: 16, fontWeight: FontWeight.w700,),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -209,13 +209,13 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
                                         style: GoogleFonts.outfit(
                                             color: _text,
                                             fontSize: 15,
-                                            fontWeight: FontWeight.w700),
+                                            fontWeight: FontWeight.w700,),
                                       ),
                                       if (isNewest) ...[
                                         const SizedBox(width: 8),
                                         Container(
                                           padding: const EdgeInsets.symmetric(
-                                              horizontal: 7, vertical: 2),
+                                              horizontal: 7, vertical: 2,),
                                           decoration: BoxDecoration(
                                             color:
                                                 _green.withValues(alpha: 0.18),
@@ -226,7 +226,7 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
                                               style: GoogleFonts.outfit(
                                                   color: _green,
                                                   fontSize: 10,
-                                                  fontWeight: FontWeight.w700)),
+                                                  fontWeight: FontWeight.w700,),),
                                         ),
                                       ],
                                     ],
@@ -235,7 +235,7 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
                                   Text(
                                     '${_when(a.updatedAt)} · ${a.sizeLabel}',
                                     style: GoogleFonts.outfit(
-                                        color: _muted, fontSize: 11.5),
+                                        color: _muted, fontSize: 11.5,),
                                   ),
                                 ],
                               ),
@@ -262,7 +262,7 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
                                     Text(
                                       '${(_progress * 100).toStringAsFixed(0)}%',
                                       style: GoogleFonts.outfit(
-                                          color: _muted, fontSize: 11),
+                                          color: _muted, fontSize: 11,),
                                     ),
                                   ],
                                 ),
@@ -284,7 +284,7 @@ class _AdminAppVersionsScreenState extends State<AdminAppVersionsScreen> {
                                   style: GoogleFonts.outfit(
                                       color: isNewest ? _green : _purple,
                                       fontSize: 12.5,
-                                      fontWeight: FontWeight.w600),
+                                      fontWeight: FontWeight.w600,),
                                 ),
                               ),
                           ],

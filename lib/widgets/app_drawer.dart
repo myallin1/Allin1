@@ -7,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/update_service.dart';
 
 const Color _drawerPink = Color(0xFFFF4FA3);
-const Color _drawerPinkSoft = Color(0xFFFFA8CF);
 const Color _drawerWhite = Color(0xFFFFFFFF);
 const Color _drawerBorder = Color(0x33FF4FA3);
 

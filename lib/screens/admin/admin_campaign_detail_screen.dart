@@ -144,7 +144,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: _surface,
         title: Text('Change destination',
-            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800)),
+            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800),),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -185,7 +185,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
       ),
     );
     if (result == null || result.isEmpty) return;
-    if (!RegExp(r'^https?://', caseSensitive: false).hasMatch(result)) {
+    if (!RegExp('^https?://', caseSensitive: false).hasMatch(result)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -201,7 +201,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
 
   Future<void> _toggleActive() async {
     final active = (_campaign?['active'] as bool?) ?? true;
-    await AffiliateService.instance.setActive(widget.code, !active);
+    await AffiliateService.instance.setActive(widget.code, active: !active);
     await _load();
   }
 
@@ -216,7 +216,6 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
           children: [
             QrImageView(
               data: shortUrl,
-              version: QrVersions.auto,
               size: 250,
               backgroundColor: Colors.white,
             ),
@@ -231,7 +230,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
               ),
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
-            )
+            ),
           ],
         ),
       ),
@@ -323,7 +322,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
                   style: GoogleFonts.outfit(
                       color: active ? _green : _amber,
                       fontSize: 10,
-                      fontWeight: FontWeight.w800),
+                      fontWeight: FontWeight.w800,),
                 ),
               ),
               const Spacer(),
@@ -334,15 +333,15 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
                         ? Icons.pause_circle_outline_rounded
                         : Icons.play_circle_outline_rounded,
                     color: _pink,
-                    size: 18),
+                    size: 18,),
                 label: Text(active ? 'Pause' : 'Resume',
-                    style: GoogleFonts.outfit(color: _pink, fontSize: 12)),
+                    style: GoogleFonts.outfit(color: _pink, fontSize: 12),),
               ),
             ],
           ),
           const SizedBox(height: 6),
           Text('Printed short link (never changes)',
-              style: GoogleFonts.outfit(color: _muted, fontSize: 10.5)),
+              style: GoogleFonts.outfit(color: _muted, fontSize: 10.5),),
           const SizedBox(height: 4),
           Row(
             children: [
@@ -350,7 +349,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
                 child: SelectableText(
                   shortUrl,
                   style: GoogleFonts.robotoMono(
-                      color: _text, fontSize: 12.5, fontWeight: FontWeight.w600),
+                      color: _text, fontSize: 12.5, fontWeight: FontWeight.w600,),
                 ),
               ),
               IconButton(
@@ -372,7 +371,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
           ),
           const Divider(color: Colors.white12, height: 20),
           Text('Currently forwards to (editable anytime)',
-              style: GoogleFonts.outfit(color: _muted, fontSize: 10.5)),
+              style: GoogleFonts.outfit(color: _muted, fontSize: 10.5),),
           const SizedBox(height: 4),
           Row(
             children: [
@@ -386,7 +385,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
                 onPressed: _editDestination,
                 child: Text('Change',
                     style: GoogleFonts.outfit(
-                        color: _pink, fontSize: 12, fontWeight: FontWeight.w700)),
+                        color: _pink, fontSize: 12, fontWeight: FontWeight.w700,),),
               ),
             ],
           ),
@@ -422,12 +421,12 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
               FittedBox(
                 child: Text(value,
                     style: GoogleFonts.outfit(
-                        color: _text, fontSize: 17, fontWeight: FontWeight.w800)),
+                        color: _text, fontSize: 17, fontWeight: FontWeight.w800,),),
               ),
               const SizedBox(height: 2),
               Text(label,
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(color: _muted, fontSize: 9.5)),
+                  style: GoogleFonts.outfit(color: _muted, fontSize: 9.5),),
             ],
           ),
         ),
@@ -449,7 +448,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
             children: [
               Text('Scans over time',
                   style: GoogleFonts.outfit(
-                      color: _text, fontSize: 14, fontWeight: FontWeight.w800)),
+                      color: _text, fontSize: 14, fontWeight: FontWeight.w800,),),
               const Spacer(),
               _toggle('Hour', _byHour, () => setState(() => _byHour = true)),
               const SizedBox(width: 6),
@@ -472,7 +471,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
                         if (e.value > 0)
                           Text('${e.value}',
                               style: GoogleFonts.outfit(
-                                  color: _muted, fontSize: 8)),
+                                  color: _muted, fontSize: 8,),),
                         const SizedBox(height: 2),
                         Container(
                           height: h,
@@ -512,7 +511,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
               style: GoogleFonts.outfit(
                   color: on ? Colors.white : _muted,
                   fontSize: 10.5,
-                  fontWeight: FontWeight.w700)),
+                  fontWeight: FontWeight.w700,),),
         ),
       );
 
@@ -532,10 +531,10 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
         children: [
           Text('Device / OS',
               style: GoogleFonts.outfit(
-                  color: _text, fontSize: 14, fontWeight: FontWeight.w800)),
+                  color: _text, fontSize: 14, fontWeight: FontWeight.w800,),),
           const SizedBox(height: 4),
           Text('Tells you which app build to push hardest in Erode.',
-              style: GoogleFonts.outfit(color: _muted, fontSize: 10.5)),
+              style: GoogleFonts.outfit(color: _muted, fontSize: 10.5),),
           const SizedBox(height: 12),
           ...split.entries.map((e) {
             final pct = _total == 0 ? 0.0 : e.value / _total;
@@ -547,7 +546,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
                     width: 62,
                     child: Text(e.key,
                         style:
-                            GoogleFonts.outfit(color: _text, fontSize: 11.5)),
+                            GoogleFonts.outfit(color: _text, fontSize: 11.5),),
                   ),
                   Expanded(
                     child: ClipRRect(
@@ -562,7 +561,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text('${(pct * 100).toStringAsFixed(0)}%',
-                      style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+                      style: GoogleFonts.outfit(color: _muted, fontSize: 11),),
                 ],
               ),
             );
@@ -590,7 +589,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
         children: [
           Text('Campaign',
               style: GoogleFonts.outfit(
-                  color: _text, fontSize: 14, fontWeight: FontWeight.w800)),
+                  color: _text, fontSize: 14, fontWeight: FontWeight.w800,),),
           const SizedBox(height: 12),
           _metaRow('Code', widget.code),
           _metaRow('Type', (c['type'] ?? '-').toString()),
@@ -598,7 +597,7 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
           _metaRow('Print run', printRun == 0 ? '-' : '$printRun'),
           if (printRun > 0)
             _metaRow('Scan rate',
-                '${(scanned / printRun * 100).toStringAsFixed(1)}% of printed'),
+                '${(scanned / printRun * 100).toStringAsFixed(1)}% of printed',),
           _metaRow('Start', start == null ? '-' : '${start.day}/${start.month}/${start.year}'),
           _metaRow('End', end == null ? '-' : '${end.day}/${end.month}/${end.year}'),
         ],
@@ -614,12 +613,12 @@ class _AdminCampaignDetailScreenState extends State<AdminCampaignDetailScreen> {
             SizedBox(
               width: 84,
               child: Text(k,
-                  style: GoogleFonts.outfit(color: _muted, fontSize: 11.5)),
+                  style: GoogleFonts.outfit(color: _muted, fontSize: 11.5),),
             ),
             Expanded(
               child: Text(v,
                   style: GoogleFonts.outfit(
-                      color: _text, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                      color: _text, fontSize: 11.5, fontWeight: FontWeight.w600,),),
             ),
           ],
         ),

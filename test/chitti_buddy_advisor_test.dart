@@ -7,12 +7,11 @@
 // GATE — that the personality switches off on a bad moment — and that
 // the "knowledgeable question" is built from what is actually on the
 // screen rather than a canned line.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/config/app_variant.dart';
 import 'package:erode_superapp/services/chitti/chitti_buddy.dart';
 import 'package:erode_superapp/services/chitti/chitti_screen_advisor.dart';
 import 'package:erode_superapp/services/chitti/chitti_screen_reader.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 ChittiScreenSnapshot _snap({
   String? title,
@@ -148,7 +147,7 @@ void main() {
           ),
         ],
         buttons: const ['Confirm Booking'],
-      ));
+      ),);
       expect(a, isNotNull);
       expect(a!.text, contains('Drop location'));
       expect(a.suggestions, contains('Confirm Booking'));
@@ -161,7 +160,7 @@ void main() {
           ChittiScreenElement(label: 'Search', kind: ChittiElementKind.field),
         ],
         buttons: const ['View Cart'],
-      ));
+      ),);
       expect(a!.text, isNot(contains('Search')));
       expect(a.suggestions, contains('View Cart'));
     });
@@ -171,7 +170,7 @@ void main() {
       final a = ChittiScreenAdvisor.adviseFrom(_snap(
         title: 'Brand New Feature',
         buttons: const ['Start Trial', 'See Plans'],
-      ));
+      ),);
       expect(a, isNotNull);
       expect(a!.suggestions, containsAll(<String>['Start Trial', 'See Plans']));
     });
@@ -180,7 +179,7 @@ void main() {
       final a = ChittiScreenAdvisor.adviseFrom(_snap(
         title: 'Some Page',
         buttons: const ['Back', 'OK', 'Redeem Coins'],
-      ));
+      ),);
       expect(a!.suggestions, <String>['Redeem Coins']);
     });
 

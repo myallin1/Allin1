@@ -121,7 +121,7 @@ class _HeroServiceAccessSheetState extends State<_HeroServiceAccessSheet> {
         // rather than only ever growing. merge:true leaves every other
         // field on the doc untouched.
         kHeroSkillsField: _skills.toList(growable: false),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true),);
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -150,7 +150,7 @@ class _HeroServiceAccessSheetState extends State<_HeroServiceAccessSheet> {
     final name = (widget.heroData['name'] as String?)?.trim();
     final deniedCount = _allowed.values.where((v) => !v).length;
 
-    return Container(
+    return DecoratedBox(
       decoration: const BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -194,7 +194,7 @@ class _HeroServiceAccessSheetState extends State<_HeroServiceAccessSheet> {
                 'cab hero take parcel jobs, which they never get otherwise. '
                 'Takes effect immediately, even if they are online right now.',
                 style: GoogleFonts.outfit(
-                    color: _muted, fontSize: 12, height: 1.45),
+                    color: _muted, fontSize: 12, height: 1.45,),
               ),
               const SizedBox(height: 16),
 
@@ -213,7 +213,7 @@ class _HeroServiceAccessSheetState extends State<_HeroServiceAccessSheet> {
                 'than one — add a second trade instead of registering '
                 'them again.',
                 style: GoogleFonts.outfit(
-                    color: _muted, fontSize: 11.5, height: 1.35),
+                    color: _muted, fontSize: 11.5, height: 1.35,),
               ),
               const SizedBox(height: 10),
               Wrap(
@@ -258,7 +258,7 @@ class _HeroServiceAccessSheetState extends State<_HeroServiceAccessSheet> {
                   'No trade selected — this hero receives no skilled-service '
                   'jobs regardless of the Electronics service switch below.',
                   style: GoogleFonts.outfit(
-                      color: _muted, fontSize: 11, height: 1.35),
+                      color: _muted, fontSize: 11, height: 1.35,),
                 ),
               ],
               const SizedBox(height: 18),
@@ -294,14 +294,14 @@ class _HeroServiceAccessSheetState extends State<_HeroServiceAccessSheet> {
                             Text(
                               HeroServiceKeys.descriptions[key] ?? '',
                               style: GoogleFonts.outfit(
-                                  color: _muted, fontSize: 11.5, height: 1.35),
+                                  color: _muted, fontSize: 11.5, height: 1.35,),
                             ),
                           ],
                         ),
                       ),
                       Switch(
                         value: _allowed[key]!,
-                        activeColor: _green,
+                        activeThumbColor: _green,
                         inactiveThumbColor: _red,
                         onChanged: _saving
                             ? null

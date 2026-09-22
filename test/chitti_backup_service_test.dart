@@ -13,11 +13,10 @@
 //   • a backup from a NEWER app is refused rather than half-applied.
 import 'dart:io';
 
+import 'package:erode_superapp/services/chitti/chitti_backup_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:erode_superapp/services/chitti/chitti_backup_service.dart';
 
 void main() {
   // buildPayload/applyPayload touch Hive and SharedPreferences. Both
@@ -29,7 +28,7 @@ void main() {
   });
 
   group('what travels to a new phone', () {
-    test('carries Chitti\'s memory of the customer', () {
+    test("carries Chitti's memory of the customer", () {
       // The whole point: a new phone gets the same Chitti, not a
       // stranger.
       expect(

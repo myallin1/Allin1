@@ -10,11 +10,10 @@
 // what it genuinely knows and return null for everything else, so the
 // model still gets its turn. A confidently wrong answer about the
 // customer's own app is worse than no answer.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/config/app_variant.dart';
 import 'package:erode_superapp/services/chitti/chitti_local_answer_service.dart';
 import 'package:erode_superapp/services/chitti_memory_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final original = currentAppVariant;

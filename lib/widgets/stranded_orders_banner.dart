@@ -108,7 +108,7 @@ class _StrandedOrdersBannerState extends State<StrandedOrdersBanner> {
               Row(
                 children: [
                   const Icon(Icons.hourglass_bottom_rounded,
-                      color: _amber, size: 18),
+                      color: _amber, size: 18,),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(

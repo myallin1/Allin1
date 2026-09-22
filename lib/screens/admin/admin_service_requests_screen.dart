@@ -25,12 +25,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/service_request_model.dart';
 import '../../services/admin_deletion_service.dart';
+import '../../services/firestore_usage_tracking.dart';
 import '../../utils/service_request_labels.dart';
 import '../../widgets/admin/admin_selection_mixin.dart';
 import '../../widgets/order_photo_gallery.dart';
 import '../service_request_tracking_screen.dart';
 import 'admin_new_orders_screen.dart' show AssignHeroSheet, requestSummary;
-import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -137,12 +137,12 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
   }
 
   List<ServiceRequestModel> _mapAndSort(
-      QuerySnapshot<Map<String, dynamic>> snap) {
+      QuerySnapshot<Map<String, dynamic>> snap,) {
     return snap.docs
         .map((d) => ServiceRequestModel.fromFirestore(d.data(), d.id))
         .toList()
       ..sort((a, b) => (b.createdAt ?? DateTime(0))
-          .compareTo(a.createdAt ?? DateTime(0)));
+          .compareTo(a.createdAt ?? DateTime(0)),);
   }
 
   void _listen() {
@@ -303,7 +303,7 @@ class _AdminServiceRequestsScreenState extends State<AdminServiceRequestsScreen>
     // list and is otherwise completely unchanged.
     final requests = <ServiceRequestModel>[..._activeRequests, ..._completedRequests]
       ..sort((a, b) =>
-          (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+          (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),);
     // Test Data Cleanup (Aug 11 2026): client-side filter on the
     // already-loaded, already-paid-for page — never a second query.
     final visible = requests

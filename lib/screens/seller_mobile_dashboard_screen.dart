@@ -230,7 +230,7 @@ class _SellerMobileDashboardScreenState
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.smartphone_rounded,
-                      color: _muted, size: 54),
+                      color: _muted, size: 54,),
                   const SizedBox(height: 14),
                   Text(
                     wantUsed
@@ -328,10 +328,10 @@ class _SellerMobileDashboardScreenState
                         // buried in the editor.
                         GestureDetector(
                           onTap: () => _listingService.setInStock(
-                              uid, listing.id, !listing.inStock),
+                              uid, listing.id, !listing.inStock,),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
+                                horizontal: 10, vertical: 5,),
                             decoration: BoxDecoration(
                               color: (listing.inStock ? _green : _muted)
                                   .withValues(alpha: 0.15),
@@ -351,14 +351,14 @@ class _SellerMobileDashboardScreenState
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.edit_outlined,
-                              color: _muted, size: 18),
+                              color: _muted, size: 18,),
                           onPressed: () => _openEditor(seller, uid, listing),
                           tooltip: 'Edit',
                         ),
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.delete_outline_rounded,
-                              color: Color(0xFFFF5252), size: 18),
+                              color: Color(0xFFFF5252), size: 18,),
                           onPressed: () => _confirmDelete(uid, listing),
                           tooltip: 'Delete',
                         ),
@@ -402,7 +402,7 @@ class _SellerMobileDashboardScreenState
       builder: (ctx) => AlertDialog(
         backgroundColor: _card,
         title: Text('Remove listing?',
-            style: GoogleFonts.outfit(color: _text)),
+            style: GoogleFonts.outfit(color: _text),),
         content: Text(
           '${listing.displayName} will no longer be visible to customers.',
           style: GoogleFonts.outfit(color: _muted),
@@ -417,12 +417,12 @@ class _SellerMobileDashboardScreenState
             child: Text('Remove',
                 style: GoogleFonts.outfit(
                     color: const Color(0xFFFF5252),
-                    fontWeight: FontWeight.w700)),
+                    fontWeight: FontWeight.w700,),),
           ),
         ],
       ),
     );
-    if (ok == true) {
+    if (ok ?? false) {
       await _listingService.deleteListing(uid, listing.id);
     }
   }

@@ -19,9 +19,9 @@
 // appeared to open several times. This has now regressed twice, so
 // the rule is pinned here rather than left to a comment: a PopupRoute
 // must never trigger a lift.
+import 'package:erode_superapp/services/chitti/chitti_screen_tracker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:erode_superapp/services/chitti/chitti_screen_tracker.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

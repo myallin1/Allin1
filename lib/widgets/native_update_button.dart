@@ -50,8 +50,7 @@ class NativeUpdateButton extends StatefulWidget {
   final Color color;
 
   const NativeUpdateButton({
-    super.key,
-    required this.appVariant,
+    required this.appVariant, super.key,
     this.color = const Color(0xFFFFBB00),
   });
 
@@ -168,7 +167,7 @@ class _NativeUpdateButtonState extends State<NativeUpdateButton> {
                 )
               else
                 Icon(Icons.system_update_rounded,
-                    size: 15, color: widget.color),
+                    size: 15, color: widget.color,),
               const SizedBox(width: 5),
               Text(
                 _busy

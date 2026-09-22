@@ -457,13 +457,13 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.open_in_browser_rounded,
-                      color: _text, size: 19),
+                      color: _text, size: 19,),
                   tooltip: 'Open in Chrome',
                   onPressed: () async {
                     final current = await _controller.currentUrl();
                     if (current == null) return;
                     await launchUrl(Uri.parse(current),
-                        mode: LaunchMode.externalApplication);
+                        mode: LaunchMode.externalApplication,);
                   },
                 ),
               ],
@@ -491,7 +491,7 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
           title: Text(
             widget.title,
             style: GoogleFonts.outfit(
-                color: _text, fontWeight: FontWeight.w700, fontSize: 16),
+                color: _text, fontWeight: FontWeight.w700, fontSize: 16,),
           ),
           actions: [
             IconButton(
@@ -505,7 +505,7 @@ class _GitHubEmbeddedScreenState extends State<GitHubEmbeddedScreen> {
                 final current = await _controller.currentUrl();
                 if (current == null) return;
                 await launchUrl(Uri.parse(current),
-                    mode: LaunchMode.externalApplication);
+                    mode: LaunchMode.externalApplication,);
               },
             ),
           ],

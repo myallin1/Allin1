@@ -40,3 +40,19 @@ String cityLabelFor(String slug) {
   }
   return slug.isEmpty ? cityLabelFor(kDefaultCity) : slug;
 }
+
+(double lat, double lng) cityCenterCoordinates(String slug) {
+  switch (slug.toLowerCase()) {
+    case 'coimbatore':
+      return (11.0168, 76.9558);
+    case 'salem':
+      return (11.6643, 78.1460);
+    case 'tiruppur':
+      return (11.1085, 77.3411);
+    case 'tiruchy':
+      return (10.7905, 78.7047);
+    case 'erode':
+    default:
+      return (11.3410, 77.7172);
+  }
+}

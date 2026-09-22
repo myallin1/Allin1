@@ -198,7 +198,7 @@ const _kOlaStyleCacheKey = 'ola_vector_style_resolved_v1';
 const _kOlaStyleCacheTtl = Duration(days: 36500);
 
 Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
-  final cached = await HiveCache.get<Map>(_kOlaStyleCacheKey);
+  final cached = await HiveCache.get<Map<dynamic, dynamic>>(_kOlaStyleCacheKey);
   if (cached != null) {
     try {
       final style = _styleFromCachedJson(cached);
@@ -219,17 +219,18 @@ Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
   final styleResp =
       await http.get(styleUri).timeout(const Duration(seconds: 10));
   if (styleResp.statusCode != 200) {
-    throw 'Ola style fetch failed: HTTP ${styleResp.statusCode}';
+    throw Exception('Ola style fetch failed: HTTP ${styleResp.statusCode}');
   }
   final styleJson = json.decode(styleResp.body);
   if (styleJson is! Map<String, dynamic>) {
-    throw 'Ola style response is not a JSON object';
+    throw Exception('Ola style response is not a JSON object');
   }
 
   final sourcesJson = styleJson['sources'];
   if (sourcesJson is! Map) {
-    throw 'Ola style has no sources';
+    throw Exception('Ola style has no sources');
   }
+
 
   String withApiKey(String url) {
     final parsed = Uri.tryParse(url);
@@ -297,7 +298,7 @@ Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
   }
 
   if (providerByName.isEmpty) {
-    throw 'Ola style has no usable vector sources';
+    throw Exception('Ola style has no usable vector sources');
   }
 
   // Fire-and-forget: don't let a disk-write failure affect this session's
@@ -309,7 +310,7 @@ Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
       'resolvedSources': resolvedSourcesForCache,
     },
     ttl: _kOlaStyleCacheTtl,
-  ));
+  ),);
 
   return vmt.Style(
     name: styleJson['name'] as String?,
@@ -322,7 +323,8 @@ Future<vmt.Style> _buildOlaStyleManually(String apiKey) async {
 /// [_buildOlaStyleManually] above -- no network calls. Returns null if the
 /// cached shape is unexpected (e.g. an older cache format), so the caller
 /// falls back to a normal network fetch instead of crashing.
-vmt.Style? _styleFromCachedJson(Map cached) {
+vmt.Style? _styleFromCachedJson(Map<dynamic, dynamic> cached) {
+
   final styleJson = cached['styleJson'];
   final resolvedSources = cached['resolvedSources'];
   if (styleJson is! Map || resolvedSources is! Map) return null;
@@ -1007,7 +1009,7 @@ class _DefaultMarker extends StatelessWidget {
       );
       final clipped = circular
           ? ClipOval(
-              child: Container(
+              child: DecoratedBox(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
@@ -1112,4 +1114,3 @@ class MapCircle {
     this.borderStrokeWidth = 2.5,
   });
 }
-

@@ -304,8 +304,7 @@ class _EmptyState extends StatelessWidget {
 /// closes instead.
 class ChittiModelChip extends StatefulWidget {
   const ChittiModelChip({
-    super.key,
-    required this.onChanged,
+    required this.onChanged, super.key,
     this.foregroundColor = Colors.white,
     this.backgroundColor = const Color(0x29FFFFFF),
   });

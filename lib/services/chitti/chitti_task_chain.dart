@@ -122,7 +122,7 @@ class ChittiTaskChain {
   /// approve it, tell them") while making a runaway plan impossible.
   static const int kMaxSteps = 5;
 
-  List<ChittiTaskStep> _steps;
+  final List<ChittiTaskStep> _steps;
   int _cursor = 0;
   bool _approved = false;
   bool _aborted = false;

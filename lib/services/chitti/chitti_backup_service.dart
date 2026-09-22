@@ -45,7 +45,6 @@
 // gated only on [_hasRealAccount], not [isSupported].
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:file_picker/file_picker.dart';

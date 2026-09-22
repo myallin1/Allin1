@@ -22,17 +22,17 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../config/fare_rates.dart';
 import '../../config/payment_config.dart';
 import '../../models/ride_model.dart';
-import '../../utils/otp_utils.dart';
 import '../../services/app_minimizer_service.dart';
 import '../../services/chitti_nudge_service.dart';
 import '../../services/chitti_order_memory_service.dart';
 import '../../services/chitti_overlay_service.dart';
+import '../../services/firestore_usage_tracking.dart';
+import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
+import '../../widgets/rating_feedback_sheet.dart' show updateRateeRatingAverage;
+import '../location_picker_screen.dart';
 import '../payment_screen.dart';
 import 'bike_booking_screen.dart';
-import '../location_picker_screen.dart';
-import '../../services/firestore_usage_tracking.dart';
-import '../../widgets/rating_feedback_sheet.dart' show updateRateeRatingAverage;
 
 class RideTrackingScreen extends StatefulWidget {
   final RideModel ride;
@@ -286,7 +286,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     final minsWord = etaMinutes == 1 ? 'min' : 'mins';
     unawaited(ChittiOverlayService.instance.showNudge(
       'Your Hero is about $etaMinutes $minsWord away!',
-    ));
+    ),);
   }
 
   void _fitTrackingCamera() {
@@ -512,7 +512,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       summary: (dropAddress != null && dropAddress.isNotEmpty)
           ? 'ride to $dropAddress'
           : 'a ride',
-    ));
+    ),);
     if (!mounted) return;
     final rating = await showDialog<int>(
       context: context,
@@ -751,7 +751,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       });
     }, onError: (Object e) {
       debugPrint('[RideTrackingScreen] active_rides listener error: $e');
-    });
+    },);
   }
 
   @override
@@ -1110,14 +1110,14 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
     );
     if (picked == null || !mounted) return;
 
-    double distMeters = Geolocator.distanceBetween(
+    final double distMeters = Geolocator.distanceBetween(
       widget.ride.pickupLatitude ?? 0.0, widget.ride.pickupLongitude ?? 0.0,
-      picked.lat, picked.lng
+      picked.lat, picked.lng,
     );
-    double distKm = distMeters / 1000.0;
-    double roadDistKm = distKm * 1.3;
+    final double distKm = distMeters / 1000.0;
+    final double roadDistKm = distKm * 1.3;
 
-    double newFare = RideModel.calculateFare(roadDistKm, widget.ride.vehicleType ?? 'bike');
+    final double newFare = RideModel.calculateFare(roadDistKm, widget.ride.vehicleType ?? 'bike');
 
     try {
       await FirebaseFirestore.instance.collection('rides').doc(widget.ride.id).update({
@@ -1135,7 +1135,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update destination')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update destination')));
       }
     }
   }
@@ -1721,7 +1721,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
               onPressed: _changeDestination,
-            )),
+            ),),
             const Divider(color: _border, height: 20),
             if (_tipAmount != null && _tipAmount! > 0) ...[
               Row(

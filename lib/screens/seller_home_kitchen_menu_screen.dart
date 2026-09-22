@@ -30,8 +30,8 @@ import 'package:uuid/uuid.dart';
 import '../models/food_models.dart';
 import '../services/cloudinary_upload_service.dart';
 import '../services/food_seller_service.dart';
+import '../widgets/cached_cloud_image.dart';
 import '../widgets/menu_photo_pick_crop.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 
 const int kMaxHomeKitchenItems = 10;
 
@@ -325,7 +325,6 @@ class _SellerHomeKitchenMenuScreenState
                     CloudinaryUploadService.optimizedUrl(item.imageUrl!, width: 136),
                     width: 68,
                     height: 68,
-                    fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => _dishPlaceholder(),
                   )
                 : _dishPlaceholder(),
@@ -378,7 +377,7 @@ class _SellerHomeKitchenMenuScreenState
                       const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                            horizontal: 6, vertical: 2,),
                         decoration: BoxDecoration(
                           color: _red.withValues(alpha: 0.18),
                           borderRadius: BorderRadius.circular(6),
@@ -420,7 +419,7 @@ class _SellerHomeKitchenMenuScreenState
                       style: GoogleFonts.outfit(
                           color: _muted,
                           fontSize: 10,
-                          fontWeight: FontWeight.w600),
+                          fontWeight: FontWeight.w600,),
                     ),
                   ),
                 ],
@@ -646,7 +645,7 @@ class _DishEditorSheetState extends State<_DishEditorSheet> {
       }
       if (offerPrice >= price) {
         _showError(
-            'Offer price must be LOWER than the normal price (₹${price.toStringAsFixed(0)})');
+            'Offer price must be LOWER than the normal price (₹${price.toStringAsFixed(0)})',);
         return;
       }
     }
@@ -792,7 +791,7 @@ class _DishEditorSheetState extends State<_DishEditorSheet> {
                 'Dishes with the same section name appear grouped together '
                 'in the customer app. Leave blank to keep it ungrouped.',
                 style: GoogleFonts.outfit(
-                    color: _muted, fontSize: 11, height: 1.35),
+                    color: _muted, fontSize: 11, height: 1.35,),
               ),
               const SizedBox(height: 10),
               Row(
@@ -820,7 +819,7 @@ class _DishEditorSheetState extends State<_DishEditorSheet> {
                 'Set an offer price and customers see it as the live price '
                 'with the old price struck through. Clear it to end the offer.',
                 style: GoogleFonts.outfit(
-                    color: _muted, fontSize: 11, height: 1.35),
+                    color: _muted, fontSize: 11, height: 1.35,),
               ),
               const SizedBox(height: 10),
               Row(
@@ -880,23 +879,22 @@ class _DishEditorSheetState extends State<_DishEditorSheet> {
     final isRound = _pickedImageShape == MenuPhotoShape.circle;
     if (_pickedImageBytes != null) {
       final img = Image.memory(_pickedImageBytes!,
-          fit: BoxFit.cover, width: double.infinity);
+          fit: BoxFit.cover, width: double.infinity,);
       return isRound
           ? Center(
               child: ClipOval(
                 child: SizedBox(
-                    width: 150, height: 150, child: img),
+                    width: 150, height: 150, child: img,),
               ),
             )
           : ClipRRect(
-              borderRadius: BorderRadius.circular(14), child: img);
+              borderRadius: BorderRadius.circular(14), child: img,);
     }
     if (_existingImageUrl != null && _existingImageUrl!.isNotEmpty) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(14),
         child: CachedCloudImage(
           CloudinaryUploadService.optimizedUrl(_existingImageUrl!, width: 800),
-          fit: BoxFit.cover,
           width: double.infinity,
         ),
       );
@@ -938,4 +936,3 @@ class _DishEditorSheetState extends State<_DishEditorSheet> {
     );
   }
 }
-

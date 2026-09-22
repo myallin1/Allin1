@@ -27,23 +27,23 @@ const List<String> kCustomerBoostMessages = [
   'Your city, your app — glad to have you here today.',
   'Erode runs faster with you on Allin1. 🏙️',
   'Hope your day is off to a great start!',
-  'Small city, big convenience — that\'s Allin1.',
+  "Small city, big convenience — that's Allin1.",
   'Every order you place helps a local hero earn. 🙌',
   'Here for whatever you need, whenever you need it.',
   'Made with ❤ in Erode, just for you.',
 ];
 
 const List<String> kHeroBoostMessages = [
-  'Every ride you take today is a step forward. Let\'s go! 🏍️',
+  "Every ride you take today is a step forward. Let's go! 🏍️",
   'Your hustle keeps Erode moving — thank you for showing up.',
   'More rides, more earnings — Allin1 is rooting for you today. 💪',
-  'You\'re building something real, one trip at a time.',
-  'Stay online, stay sharp — today\'s a good day to earn.',
+  "You're building something real, one trip at a time.",
+  "Stay online, stay sharp — today's a good day to earn.",
   'Erode needs heroes like you. Go make it count!',
   'Your effort today is your growth tomorrow. Keep going.',
   'Every customer you help is one step closer to your goal.',
-  'Proud to have you on the team — let\'s earn well today!',
-  'Small steps, steady earnings — you\'ve got this.',
+  "Proud to have you on the team — let's earn well today!",
+  "Small steps, steady earnings — you've got this.",
 ];
 
 final Random _rng = Random();
@@ -74,7 +74,6 @@ void showDailyBoostSnackBar(
       ),
       backgroundColor: const Color(0xFF1A1A2A),
       behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: accentColor.withValues(alpha: 0.4)),

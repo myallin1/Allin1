@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/device_compat_service.dart';
-import '../services/usage_tracking_service.dart';
 import '../services/update_service.dart';
+import '../services/usage_tracking_service.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});

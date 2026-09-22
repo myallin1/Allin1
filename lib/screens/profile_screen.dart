@@ -75,7 +75,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserData();
   }
 
-  void _loadUserData() async {
+  Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       _currentUser = user;
@@ -154,7 +154,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'name': newName,
           'email': _emailController.text.trim(),
           'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        }, SetOptions(merge: true),);
 
         // Update Local Cache immediately (Zero Wastage)
         await HiveCache.cacheUserProfile({

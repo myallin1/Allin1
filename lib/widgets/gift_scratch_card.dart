@@ -57,7 +57,7 @@ class GiftScratchCard extends StatefulWidget {
     properties.add(DiagnosticsProperty<GiftCouponModel>('coupon', coupon));
     properties.add(DiagnosticsProperty<GiftCouponService>('service', service));
     properties.add(ObjectFlagProperty<void Function(GiftCouponReveal)?>.has(
-        'onRevealed', onRevealed,));
+        'onRevealed', onRevealed,),);
   }
 }
 

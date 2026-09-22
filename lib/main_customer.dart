@@ -21,9 +21,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import './services/firestore_usage_tracking.dart';
 import 'app_navigator.dart';
 import 'config/api_config.dart';
 import 'config/app_variant.dart';
@@ -41,30 +42,33 @@ import 'screens/customer_login_screen.dart';
 // since Aug 8 — so it can be restored in one line if Guest Mode is ever
 // rolled back.
 import 'screens/dashboard_screen.dart';
-import 'services/daily_greeting_notification_service.dart';
-import 'services/chitti_order_memory_service.dart';
 import 'screens/guru_chat_screen.dart';
 import 'screens/guru_offer_screen.dart';
 import 'screens/hero_booking_screen.dart';
 import 'screens/partner_shop_order_screen.dart';
 import 'screens/seller_detail_screen.dart';
 import 'screens/settings_screen.dart';
-import 'services/category_gateway_service.dart' show Category;
 import 'services/affiliate_service.dart';
 import 'services/ai_activation_service.dart';
 import 'services/analytics_service.dart';
-import 'services/route_breadcrumb_observer.dart';
+import 'services/api_service.dart';
+import 'services/app_error_log_service.dart';
 // GUEST MODE (Aug 11 2026): for ensureGuestSession() in main().
 import 'services/auth_service.dart';
-import 'services/api_service.dart';
 import 'services/cache_service.dart';
+import 'services/category_gateway_service.dart' show Category;
+import 'services/chitti/chitti_screen_tracker.dart';
+import 'services/chitti_order_memory_service.dart';
+import 'services/daily_greeting_notification_service.dart';
 import 'services/db_usage_tracker.dart';
 import 'services/guru_overlay_service.dart';
 import 'services/hive_cache.dart';
 import 'services/local_sync_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
+import 'services/map_simulation_service.dart';
 import 'services/migration_gate_service.dart';
+import 'services/route_breadcrumb_observer.dart';
 // receive_sharing_intent is Android/iOS only and has no web
 // implementation, so importing it unconditionally broke `flutter build
 // web`. Switch the implementation at compile time instead: web gets the
@@ -74,11 +78,8 @@ import 'services/share_intent_platform_stub.dart'
 import 'services/shared_location_inbox.dart';
 import 'services/soundbox_easter_egg_service.dart';
 import 'services/theme_service.dart';
-import 'services/map_simulation_service.dart';
-import 'services/chitti/chitti_screen_tracker.dart';
 import 'widgets/chitti_first_touch_greeter.dart';
 import 'widgets/migration_notice_overlay.dart';
-import './services/firestore_usage_tracking.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -337,8 +338,10 @@ void main() async {
       // frame.
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
+      final prevCustomerFlutterOnError = FlutterError.onError;
       FlutterError.onError = (details) {
         debugPrint('Flutter error: ${details.exceptionAsString()}');
+        AppErrorLogService.recordFlutterError(details, appVariant: 'customer');
         if (AnalyticsService.isInitialized) {
           AnalyticsService.instance.recordError(
             details.exceptionAsString(),
@@ -346,6 +349,36 @@ void main() async {
             fatal: true,
           );
         }
+        prevCustomerFlutterOnError?.call(details);
+      };
+
+      final prevCustomerPlatformOnError = PlatformDispatcher.instance.onError;
+      PlatformDispatcher.instance.onError = (error, stack) {
+        debugPrint('[main_customer] PlatformDispatcher error: $error');
+        AppErrorLogService.recordPlatformError(
+          error,
+          stack,
+          appVariant: 'customer',
+        );
+        try {
+          prevCustomerPlatformOnError?.call(error, stack);
+        } catch (_) {}
+        return true;
+      };
+
+      ErrorWidget.builder = (details) {
+        return const Material(
+          color: Colors.transparent,
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Text(
+                'Temporarily unavailable',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+          ),
+        );
       };
 
       // FIX (black/white-screen-stuck audit, per Nizam's request): this
@@ -596,7 +629,7 @@ void _syncCustomerFcmToken() {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'fcmToken': token,
           'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        }, SetOptions(merge: true),);
         debugPrint('[FCM] Token synced for customer $uid');
       }
     } catch (e) {
@@ -609,13 +642,13 @@ void _syncCustomerFcmToken() {
         FirebaseFirestore.instance.collection('users').doc(uid).set({
           'fcmToken': newToken,
           'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true)).catchError((Object e) {
+        }, SetOptions(merge: true),).catchError((Object e) {
           debugPrint('[FCM] Customer token refresh write failed for $uid: $e');
         }),
       );
     }, onError: (Object e) {
       debugPrint('[FCM] Customer onTokenRefresh listener error: $e');
-    });
+    },);
   });
 }
 

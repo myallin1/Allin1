@@ -11,9 +11,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/food_models.dart';
+import './firestore_usage_tracking.dart';
 import 'affiliate_service.dart';
 import 'db_usage_tracker.dart';
-import './firestore_usage_tracking.dart';
 
 class FoodSellerService {
   factory FoodSellerService() => _instance;
@@ -37,7 +37,7 @@ class FoodSellerService {
   // ================================================================
 
   /// Create a new seller profile in Firestore.
-  /// [sellerId] should match the Firebase Auth UID for seller users.
+  /// The seller's ID should match the Firebase Auth UID for seller users.
   Future<void> createSellerProfile(SellerModel seller) async {
     try {
       await _sellerDocRef(seller.id).set(seller.toJson());
@@ -53,7 +53,7 @@ class FoodSellerService {
         email: _auth.currentUser?.email ?? '',
         city: seller.city,
         role: 'seller',
-      ));
+      ),);
     } catch (e) {
       debugPrint('[FoodSellerService] Failed to create seller profile: $e');
       rethrow;

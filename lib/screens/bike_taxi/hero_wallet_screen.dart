@@ -257,7 +257,7 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
             color: const Color(0xFF1B5E20).withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-                color: const Color(0xFF3DBA6F).withValues(alpha: 0.45)),
+                color: const Color(0xFF3DBA6F).withValues(alpha: 0.45),),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -265,11 +265,11 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
               Row(
                 children: [
                   const Icon(Icons.savings_rounded,
-                      color: Color(0xFF3DBA6F), size: 18),
+                      color: Color(0xFF3DBA6F), size: 18,),
                   const SizedBox(width: 8),
                   Text('What MyAllin1 has been worth to you',
                       style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.w800, fontSize: 13)),
+                          fontWeight: FontWeight.w800, fontSize: 13,),),
                 ],
               ),
               const SizedBox(height: 12),
@@ -281,12 +281,12 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
                       children: [
                         Text('You earned',
                             style: GoogleFonts.outfit(
-                                fontSize: 11, color: Colors.black54)),
+                                fontSize: 11, color: Colors.black54,),),
                         Text('₹${earned.toStringAsFixed(0)}',
                             style: GoogleFonts.outfit(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w900,
-                                color: const Color(0xFF1B5E20))),
+                                color: const Color(0xFF1B5E20),),),
                       ],
                     ),
                   ),
@@ -296,10 +296,10 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
                       children: [
                         Text('App usage cost',
                             style: GoogleFonts.outfit(
-                                fontSize: 11, color: Colors.black54)),
+                                fontSize: 11, color: Colors.black54,),),
                         Text('₹${spent.toStringAsFixed(2)}',
                             style: GoogleFonts.outfit(
-                                fontSize: 20, fontWeight: FontWeight.w900)),
+                                fontSize: 20, fontWeight: FontWeight.w900,),),
                       ],
                     ),
                   ),
@@ -314,7 +314,7 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
                       fontSize: 12.5,
                       height: 1.4,
                       fontWeight: FontWeight.w600,
-                      color: const Color(0xFF1B5E20)),
+                      color: const Color(0xFF1B5E20),),
                 ),
               ],
               const SizedBox(height: 8),
@@ -323,7 +323,7 @@ class _HeroWalletScreenState extends State<HeroWalletScreen> {
                 'customer pays you is yours. This small usage fee is only '
                 'for running the app.',
                 style: GoogleFonts.outfit(
-                    fontSize: 11.5, height: 1.4, color: Colors.black54),
+                    fontSize: 11.5, height: 1.4, color: Colors.black54,),
               ),
             ],
           ),

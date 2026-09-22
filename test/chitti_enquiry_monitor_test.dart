@@ -9,9 +9,9 @@
 // will confirm the exact rate shortly" — a promise the app had no way
 // to keep. These pin the reachability of the screen that keeps it,
 // because a monitor nobody can open is the same bug in a new place.
-import 'package:flutter_test/flutter_test.dart';
 import 'package:erode_superapp/screens/admin/chitti_enquiries_screen.dart';
 import 'package:erode_superapp/services/chitti/chitti_section_registry.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('the monitor is reachable in both apps that need it', () {

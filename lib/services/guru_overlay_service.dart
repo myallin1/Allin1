@@ -180,7 +180,7 @@ class GuruOverlayService extends ChangeNotifier {
   /// Whether the "continue or new?" prompt has already been answered.
 
   ///
-  /// Deliberately separate from [_restoredThisSession]. They used to
+  /// Deliberately separate from `_restoredThisSession`. They used to
   /// be one flag, and startNewChat() resets that one — which "Start
   /// New" on the prompt itself calls. So answering the prompt re-armed
   /// it, and the next panel rebuild asked again, and again.
@@ -1157,7 +1157,7 @@ class GuruOverlayService extends ChangeNotifier {
       case 'create_dev_task_from_error':
         final errorEngineLabel =
             ChittiDevEngineTag.fromName(args['engine'] as String?).label;
-        return "I found the on-device error log. Shall I ask $errorEngineLabel "
+        return 'I found the on-device error log. Shall I ask $errorEngineLabel '
             'to audit this error and propose a fix on GitHub (no code yet)?';
       default:
         return 'Should I proceed?';

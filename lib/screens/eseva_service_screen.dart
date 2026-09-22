@@ -22,8 +22,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
-import 'package:erode_superapp/services/localization_service.dart';
+
+import '../services/localization_service.dart';
+import '../widgets/cached_cloud_image.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kPurple = Color(0xFF7B6FE0);
@@ -269,10 +270,9 @@ class _EsevaTile extends StatelessWidget {
               ),
               child: CachedCloudImage(
                 service.imageUrl,
-                fit: BoxFit.cover,
                 loadingBuilder: (_, child, progress) => progress == null
                     ? child
-                    : Container(
+                    : ColoredBox(
                         color: _kPink.withValues(alpha: 0.08),
                         child: const Center(
                           child: SizedBox(
@@ -281,7 +281,7 @@ class _EsevaTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                errorBuilder: (_, __, ___) => Container(
+                errorBuilder: (_, __, ___) => DecoratedBox(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
@@ -307,4 +307,3 @@ class _EsevaTile extends StatelessWidget {
     );
   }
 }
-

@@ -71,7 +71,7 @@ class AppUpdateGateService {
   /// "unknown" rather than "very old" — a parse failure must never nag
   /// every hero to reinstall.
   static int get currentBuild {
-    final v = AppKnowledge.version;
+    const v = AppKnowledge.version;
     final plus = v.lastIndexOf('+');
     if (plus < 0 || plus == v.length - 1) return 0;
     return int.tryParse(v.substring(plus + 1).trim()) ?? 0;

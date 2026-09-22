@@ -36,7 +36,6 @@ import 'dart:async' show unawaited;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -51,6 +50,7 @@ import '../screens/admin/admin_seller_approval_screen.dart';
 import '../screens/admin/admin_sos_kyc_approvals_screen.dart';
 import '../screens/admin/admin_wallet_approvals_screen.dart';
 import '../screens/admin/hero_approvals_screen.dart';
+import '../widgets/ai_loading_dialog.dart';
 import 'admin_ai_audit_tools.dart';
 import 'admin_kyc_vision_service.dart';
 import 'admin_kyc_write_service.dart';
@@ -58,7 +58,6 @@ import 'deepseek_api_service.dart';
 import 'gemini_api_service.dart';
 import 'guru_admin_api_service.dart';
 import 'voice_booking_intent_service.dart';
-import '../widgets/ai_loading_dialog.dart';
 
 class AdminChatTurn {
   const AdminChatTurn({required this.role, required this.text, this.suggestions = const []});
@@ -290,7 +289,7 @@ class AdminQuickTaskService extends ChangeNotifier {
         ],
       ),
     );
-    if (confirmed == true) _forceClose();
+    if (confirmed ?? false) _forceClose();
   }
 
   void _forceClose() {
@@ -375,7 +374,7 @@ class AdminQuickTaskService extends ChangeNotifier {
           role: 'assistant',
           text: confirmationText,
           suggestions: const ['Yes, proceed', 'No, cancel'],
-        ));
+        ),);
         unawaited(_speak(confirmationText));
         _sending = false;
         notifyListeners();
@@ -583,7 +582,7 @@ class AdminQuickTaskService extends ChangeNotifier {
         role: 'assistant',
         text: reportText,
         suggestions: ['Approve ${result.name}', 'Reject ${result.name}', 'Skip'],
-      ));
+      ),);
       unawaited(_speak(reportText));
       notifyListeners();
       return true;
@@ -747,7 +746,7 @@ class AdminQuickTaskService extends ChangeNotifier {
 
     AdminKycWriteResult? writeResult;
     if (approved && hasVerifiedTarget) {
-      final reason = (args['reportText'] as String?)?.trim().isNotEmpty == true
+      final reason = (args['reportText'] as String?)?.trim().isNotEmpty ?? false
           ? 'Rejected via Admin AI Co-Pilot after CTO review. Report:\n${args['reportText']}'
           : 'Rejected via Admin AI Co-Pilot after CTO review.';
       switch (kycTargetType) {
@@ -784,8 +783,8 @@ class AdminQuickTaskService extends ChangeNotifier {
     } else if (!hasVerifiedTarget) {
       resultText = 'Logged as approved. No verified document was captured for this request, so '
           'no real record was changed — generate a KYC report first so I can target the exact document.';
-    } else if (writeResult?.success == true) {
-      resultText = '✅ Done — the real ${kycTargetType ?? 'record'} document (uid: $uid) has been '
+    } else if (writeResult?.success ?? false) {
+      resultText = '✅ Done — the real $kycTargetType document (uid: $uid) has been '
           '${isApprove ? 'approved' : 'rejected'}, and the decision is logged.';
     } else {
       resultText = '❌ The write failed: ${writeResult?.error ?? 'unknown error'}. Nothing was '
@@ -871,7 +870,7 @@ class AdminQuickTaskFab extends StatelessWidget {
           child: SafeArea(
             child: GestureDetector(
               onTap: () => AdminQuickTaskService.instance.show(startListening: true),
-              onDoubleTap: () => AdminQuickTaskService.instance.show(),
+              onDoubleTap: AdminQuickTaskService.instance.show,
               child: Container(
                 width: 56,
                 height: 56,
@@ -1112,7 +1111,7 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
               child: SizedBox(
                 width: width,
                 height: height,
-                child: child!,
+                child: child,
               ),
             );
           },
@@ -1280,7 +1279,7 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
                                                   backgroundColor: const Color(0xFF20202E),
                                                   labelStyle: const TextStyle(color: Colors.white),
                                                   onPressed: () => _send(s),
-                                                ))
+                                                ),)
                                             .toList(),
                                       ),
                                     ),
@@ -1333,7 +1332,7 @@ class _AdminQuickTaskPanelState extends State<_AdminQuickTaskPanel> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.send_rounded, color: Color(0xFFE05555), size: 20),
-                              onPressed: () => _send(),
+                              onPressed: _send,
                             ),
                           ],
                         ),

@@ -5,8 +5,8 @@
 // the voicing alternation (one Tamil letter, several Latin sounds) and
 // the doubled-consonant case. A regression here does not crash — it
 // just makes every Thanglish reader's app look slightly illiterate.
-import 'package:flutter_test/flutter_test.dart';
 import 'package:erode_superapp/services/tamil_transliteration.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   String t(String s) => TamilTransliteration.toLatin(s);

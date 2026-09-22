@@ -41,22 +41,23 @@ class ChittiOrderMemoryService {
 
   static List<Map<String, dynamic>> _cache = <Map<String, dynamic>>[];
 
-  static Future<Box> _box() async {
-    if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);
+  static Future<Box<dynamic>> _box() async {
+    if (Hive.isBoxOpen(_boxName)) return Hive.box<dynamic>(_boxName);
     // Idempotent, same as HiveCache._box() — safe even if another
     // entrypoint (hero/seller) already called this.
     await Hive.initFlutter();
-    return Hive.openBox(_boxName);
+    return Hive.openBox<dynamic>(_boxName);
   }
 
-  static List<Map<String, dynamic>> _readEntries(Box box) {
+  static List<Map<String, dynamic>> _readEntries(Box<dynamic> box) {
     final raw = box.get(_entriesKey);
     if (raw is! List) return <Map<String, dynamic>>[];
     return raw
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
+        .whereType<Map<dynamic, dynamic>>()
+        .map(Map<String, dynamic>.from)
         .toList();
   }
+
 
   /// Call once at boot (after Hive.initFlutter()) so recentSummary()
   /// can stay synchronous. Safe to skip — callers just see no history

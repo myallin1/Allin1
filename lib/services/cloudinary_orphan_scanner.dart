@@ -117,7 +117,7 @@ class CloudinaryOrphanScanner {
       // (f_auto,q_auto / w_300,c_limit / etc — always contains a comma
       // or starts with a known transform-parameter prefix).
       if (RegExp(r'^v\d+$').hasMatch(seg)) continue;
-      if (seg.contains(',') || RegExp(r'^(f_|q_|w_|h_|c_)').hasMatch(seg)) {
+      if (seg.contains(',') || RegExp('^(f_|q_|w_|h_|c_)').hasMatch(seg)) {
         continue;
       }
       cleaned.add(seg);

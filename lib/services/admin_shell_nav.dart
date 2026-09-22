@@ -29,7 +29,7 @@ class AdminShellNav {
   AdminShellNav._();
 
   /// Index of the GitHub/Browser tab in the admin shell's IndexedStack.
-  static const int webTabIndex = 4;
+  static const int webTabIndex = 5;
 
   static void Function(int index)? _switcher;
 

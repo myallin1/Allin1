@@ -84,7 +84,7 @@ class _UsageFeeLedgerScreenState extends State<UsageFeeLedgerScreen> {
               'ridesHandled': (data['ridesHandled'] as num?)?.toInt(),
               'createdAtMs':
                   (data['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0,
-            })
+            },)
         .toList();
   }
 
@@ -130,7 +130,7 @@ class _UsageFeeLedgerScreenState extends State<UsageFeeLedgerScreen> {
               })
               .toList()
             ..sort((a, b) => ((b['createdAtMs'] as num?) ?? 0)
-                .compareTo((a['createdAtMs'] as num?) ?? 0));
+                .compareTo((a['createdAtMs'] as num?) ?? 0),);
 
           double totalCollected = 0;
           for (final d in feeDocs) {
@@ -170,7 +170,7 @@ class _UsageFeeLedgerScreenState extends State<UsageFeeLedgerScreen> {
                         Text(
                           '${feeDocs.length} deductions',
                           style: GoogleFonts.outfit(
-                              color: _muted, fontWeight: FontWeight.w600),
+                              color: _muted, fontWeight: FontWeight.w600,),
                         ),
                         Text(
                           'Total collected • ${_range.label}',
@@ -234,14 +234,13 @@ class _UsageFeeLedgerScreenState extends State<UsageFeeLedgerScreen> {
                                       ? heroName!.trim()
                                       : 'Hero $heroId',
                                   style: GoogleFonts.outfit(
-                                      color: _text, fontWeight: FontWeight.w700),
+                                      color: _text, fontWeight: FontWeight.w700,),
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
                                   [
                                     if (ts != null)
-                                      '${ts.day}/${ts.month}/${ts.year} • '
-                                          '${ts.hour}:${ts.minute.toString().padLeft(2, '0')}',
+                                      '${ts.day}/${ts.month}/${ts.year} • ${ts.hour}:${ts.minute.toString().padLeft(2, '0')}',
                                     if (ridesHandled != null && ridesHandled > 0)
                                       '$ridesHandled task${ridesHandled == 1 ? '' : 's'}',
                                     if (activeMinutes != null && activeMinutes > 0)
@@ -265,7 +264,7 @@ class _UsageFeeLedgerScreenState extends State<UsageFeeLedgerScreen> {
                           Text(
                             '-₹${amount.toStringAsFixed(2)}',
                             style: GoogleFonts.outfit(
-                                color: _gold, fontWeight: FontWeight.w800),
+                                color: _gold, fontWeight: FontWeight.w800,),
                           ),
                         ],
                       ),

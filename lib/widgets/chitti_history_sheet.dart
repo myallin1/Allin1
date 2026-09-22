@@ -121,7 +121,7 @@ class _ChittiHistorySheetState extends State<_ChittiHistorySheet> {
       maxChildSize: 0.92,
       expand: false,
       builder: (context, scrollController) {
-        return Container(
+        return DecoratedBox(
           decoration: BoxDecoration(
             color: _surface,
             borderRadius: const BorderRadius.vertical(

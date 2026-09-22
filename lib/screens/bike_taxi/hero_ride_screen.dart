@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/fare_rates.dart';
 import '../../models/ride_model.dart';
+import '../../services/firestore_usage_tracking.dart';
 import '../../services/hero_ride_notification_service.dart';
 import '../../services/hero_usage_accumulator_service.dart';
 import '../../services/hero_wallet_service.dart';
@@ -25,7 +26,6 @@ import '../../services/map_service.dart';
 import '../../utils/otp_utils.dart';
 import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/hero_payment_qr_popup.dart';
-import '../../services/firestore_usage_tracking.dart';
 
 class CaptainRideScreen extends StatefulWidget {
   final RideModel ride;
@@ -191,7 +191,7 @@ class _CaptainRideScreenState extends State<CaptainRideScreen>
       setState(() => _rideStatus = rtdbStatus);
     }, onError: (Object e) {
       debugPrint('[HeroRideScreen] active_rides listener error: $e');
-    });
+    },);
   }
 
   @override

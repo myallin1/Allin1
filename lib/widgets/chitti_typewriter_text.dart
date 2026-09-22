@@ -28,8 +28,7 @@ import 'package:flutter/material.dart';
 class ChittiTypewriterText extends StatefulWidget {
   const ChittiTypewriterText(
     this.text, {
-    super.key,
-    required this.style,
+    required this.style, super.key,
     this.animate = true,
   });
 

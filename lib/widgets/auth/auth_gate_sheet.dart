@@ -207,13 +207,10 @@ class _AuthGateSheetState extends State<_AuthGateSheet> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return PopScope(
-      // Never trap the customer in a login sheet. Dismissing simply means
-      // "not now" — Guest Mode's whole promise is that browsing is free.
-      canPop: true,
       child: Padding(
         // Lifts the sheet above the keyboard while the number is typed.
         padding: EdgeInsets.only(bottom: bottomInset),
-        child: Container(
+        child: DecoratedBox(
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: const BorderRadius.vertical(
@@ -391,7 +388,7 @@ class _AuthGateSheetState extends State<_AuthGateSheet> {
                               widget.phoneOnly
                                   ? 'Save & Continue'
                                   : 'Continue with Google',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w800,
                               ),

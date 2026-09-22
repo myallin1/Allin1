@@ -1,9 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../config/hero_skill_catalog.dart';
-import '../../widgets/cached_cloud_image.dart';
 import '../../services/cloudinary_upload_service.dart';
+import '../../widgets/cached_cloud_image.dart';
 
 const _bg = Color(0xFF121212);
 const _surface = Color(0xFF1E1E1E);
@@ -22,13 +23,7 @@ class AdminHeroDetailsScreen extends StatelessWidget {
   final String Function(String) getCityLabel;
 
   const AdminHeroDetailsScreen({
-    super.key,
-    required this.uid,
-    required this.data,
-    required this.onApprove,
-    required this.onReject,
-    required this.onCall,
-    required this.getCityLabel,
+    required this.uid, required this.data, required this.onApprove, required this.onReject, required this.onCall, required this.getCityLabel, super.key,
   });
 
   String _val(String key, [String fallback = 'N/A']) {
@@ -146,7 +141,6 @@ class AdminHeroDetailsScreen extends StatelessWidget {
                     children: [
                       CachedCloudImage(
                         CloudinaryUploadService.optimizedUrl(url, width: 600),
-                        fit: BoxFit.cover,
                       ),
                       Positioned(
                         bottom: 8,
@@ -159,7 +153,7 @@ class AdminHeroDetailsScreen extends StatelessWidget {
                           ),
                           child: const Icon(Icons.zoom_in, color: Colors.white, size: 20),
                         ),
-                      )
+                      ),
                     ],
                   ),
                 ),
@@ -174,7 +168,7 @@ class AdminHeroDetailsScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _muted.withValues(alpha: 0.2), style: BorderStyle.solid),
+                  border: Border.all(color: _muted.withValues(alpha: 0.2)),
                 ),
                 child: Center(
                   child: Column(

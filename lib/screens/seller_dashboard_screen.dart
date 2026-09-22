@@ -15,27 +15,27 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../models/food_models.dart';
 import '../models/service_request_model.dart';
-import '../services/chitti/chitti_enquiry_service.dart';
-import 'admin/chitti_enquiries_screen.dart';
 import '../services/app_minimizer_service.dart';
+import '../services/chitti/chitti_enquiry_service.dart';
 import '../services/chitti/chitti_host_bridge.dart';
-import '../widgets/native_update_button.dart';
 import '../services/db_usage_tracker.dart';
+import '../services/firestore_usage_tracking.dart';
 import '../services/food_seller_service.dart';
 import '../services/hive_cache.dart';
 import '../services/seller_foreground_service.dart';
 import '../services/service_request_service.dart';
+import '../widgets/native_update_button.dart';
+import 'admin/chitti_enquiries_screen.dart';
 import 'seller_custom_hotel_builder_screen.dart';
 import 'seller_earnings_screen.dart';
 import 'seller_electronics_dashboard_screen.dart';
-import 'seller_mobile_dashboard_screen.dart';
 import 'seller_grocery_dashboard_screen.dart';
 import 'seller_home_kitchen_menu_screen.dart';
+import 'seller_mobile_dashboard_screen.dart';
 import 'seller_pending_screen.dart';
 import 'seller_settings_screen.dart';
 import 'seller_side_drawer.dart';
 import 'seller_vertical_picker_screen.dart';
-import '../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFFF7FAF8);
 const Color _surface = Color(0xFFFFFFFF);
@@ -318,12 +318,12 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   // (`firebase deploy --only firestore:indexes`) before this listener
   // returns data; until then it throws `failed-precondition: requires an
   // index`, only visible via the onError debugPrint below.
-  void _listenToCatalogOrders(String sellerId) async {
+  Future<void> _listenToCatalogOrders(String sellerId) async {
     // 1. Hydrate from cache immediately
     final cached = await HiveCache.getCachedSellerOrders('${sellerId}_catalog');
     if (cached != null && mounted) {
       setState(() {
-        _catalogOrders = cached.map((c) => ServiceRequestModel.fromJson(c as Map<String, dynamic>)).toList();
+        _catalogOrders = cached.map(ServiceRequestModel.fromJson).toList();
       });
     }
 
@@ -367,12 +367,12 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   // else identical, including the orderBy+composite-index fix and its
   // requirement (same index covers both: field set is identical, only
   // the requestType value differs).
-  void _listenToCustomHotelOrders(String sellerId) async {
+  Future<void> _listenToCustomHotelOrders(String sellerId) async {
     // 1. Hydrate from cache immediately
     final cached = await HiveCache.getCachedSellerOrders('${sellerId}_custom');
     if (cached != null && mounted) {
       setState(() {
-        _customHotelOrders = cached.map((c) => ServiceRequestModel.fromJson(c as Map<String, dynamic>)).toList();
+        _customHotelOrders = cached.map(ServiceRequestModel.fromJson).toList();
       });
     }
 
@@ -874,12 +874,12 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       children: [
         Row(
           children: [
-            Expanded(child: Divider(color: _border)),
+            const Expanded(child: Divider(color: _border)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Text('OR', style: GoogleFonts.outfit(color: _muted, fontSize: 11, fontWeight: FontWeight.w700)),
             ),
-            Expanded(child: Divider(color: _border)),
+            const Expanded(child: Divider(color: _border)),
           ],
         ),
         const SizedBox(height: 12),
@@ -910,10 +910,10 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Build a Custom Hotel',
-                          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 14.5)),
+                          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 14.5),),
                       const SizedBox(height: 2),
                       Text('Start from an empty menu and build your own listings',
-                          style: GoogleFonts.outfit(color: _muted, fontSize: 11.5)),
+                          style: GoogleFonts.outfit(color: _muted, fontSize: 11.5),),
                     ],
                   ),
                 ),
@@ -1190,8 +1190,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                 ),
                 child: QrImageView(
                   data: 'https://allin1.com/store/${_seller!.id}',
-                  version: QrVersions.auto,
-                  size: 200.0,
+                  size: 200,
                   backgroundColor: Colors.white,
                 ),
               ),
@@ -1294,7 +1293,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                             ),
                             Switch(
                               value: isAvailable,
-                              activeColor: _green,
+                              activeThumbColor: _green,
                               inactiveThumbColor: _red,
                               onChanged: (val) async {
                                 await doc.reference.update({'isAvailable': val});

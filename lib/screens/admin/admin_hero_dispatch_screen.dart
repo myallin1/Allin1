@@ -623,7 +623,7 @@ class _AdminHeroDispatchScreenState extends State<AdminHeroDispatchScreen>
                   itemCount: listHeroes.length,
                   itemBuilder: (ctx, i) {
                     final hero = listHeroes[i];
-                    final isOnline = _filter == 'all' ? (hero['isOnline'] == true) : true;
+                    final isOnline = !(_filter == 'all') || (hero['isOnline'] == true);
                     final isAvailable = hero['isAvailable'] == true;
                     final distanceKm = hero['distanceKm'] as double?;
                     final statusColor = !isOnline ? _muted : (isAvailable ? _green : _red);

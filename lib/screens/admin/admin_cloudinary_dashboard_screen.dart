@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:erode_superapp/services/cloudinary_admin_service.dart';
-import 'package:erode_superapp/services/cloudinary_orphan_scanner.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../../services/cloudinary_admin_service.dart';
+import '../../services/cloudinary_orphan_scanner.dart';
+import '../../widgets/cached_cloud_image.dart';
 
 class AdminCloudinaryDashboardScreen extends StatefulWidget {
   const AdminCloudinaryDashboardScreen({super.key});
@@ -282,7 +282,7 @@ class _AdminCloudinaryDashboardScreenState extends State<AdminCloudinaryDashboar
                           child: SwitchListTile(
                             contentPadding: EdgeInsets.zero,
                             dense: true,
-                            activeColor: _pink,
+                            activeThumbColor: _pink,
                             title: Text(
                               'Show unused only',
                               style: GoogleFonts.outfit(fontSize: 13, color: _text, fontWeight: FontWeight.w600),
@@ -304,7 +304,7 @@ class _AdminCloudinaryDashboardScreenState extends State<AdminCloudinaryDashboar
                       const SliverToBoxAdapter(
                         child: Center(
                           child: Padding(
-                            padding: EdgeInsets.all(40.0),
+                            padding: EdgeInsets.all(40),
                             child: Text('No images found in Cloudinary.'),
                           ),
                         ),
@@ -344,7 +344,7 @@ class _AdminCloudinaryDashboardScreenState extends State<AdminCloudinaryDashboar
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _pink.withOpacity(0.2)),
+        border: Border.all(color: _pink.withValues(alpha: 0.2)),
         boxShadow: const [
           BoxShadow(color: Color(0x12FF4FA3), blurRadius: 16, offset: Offset(0, 6)),
         ],
@@ -450,7 +450,7 @@ class _AdminCloudinaryDashboardScreenState extends State<AdminCloudinaryDashboar
           }
         });
       },
-      child: Container(
+      child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
@@ -465,7 +465,6 @@ class _AdminCloudinaryDashboardScreenState extends State<AdminCloudinaryDashboar
             children: [
               CachedCloudImage(
                 res.secureUrl,
-                fit: BoxFit.cover,
                 cacheWidth: 300, // optimization for dashboard thumbnails
               ),
               Positioned(
@@ -532,7 +531,7 @@ class _AdminCloudinaryDashboardScreenState extends State<AdminCloudinaryDashboar
   Widget _buildNotConfiguredState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32.0),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [

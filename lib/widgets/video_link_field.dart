@@ -46,9 +46,7 @@ class VideoLinkField extends StatelessWidget {
   final Color accentColor;
 
   const VideoLinkField({
-    super.key,
-    required this.controller,
-    required this.onChanged,
+    required this.controller, required this.onChanged, super.key,
     this.label = 'YouTube video link',
     this.helper =
         'Paste the share link from the YouTube app. Optional — but a short '
@@ -87,7 +85,7 @@ class VideoLinkField extends StatelessWidget {
                   borderRadius: BorderRadius.circular(7),
                 ),
                 child: const Icon(Icons.smart_display_rounded,
-                    color: kVideoRed, size: 15),
+                    color: kVideoRed, size: 15,),
               ),
               const SizedBox(width: 8),
               Text(
@@ -111,7 +109,7 @@ class VideoLinkField extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(helper,
-              style: GoogleFonts.outfit(color: mutedColor, fontSize: 11)),
+              style: GoogleFonts.outfit(color: mutedColor, fontSize: 11),),
           const SizedBox(height: 10),
           TextField(
             controller: controller,
@@ -149,7 +147,7 @@ class VideoLinkField extends StatelessWidget {
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(kRadiusSm),
                 borderSide: BorderSide(
-                    color: hasText ? stateColor : accentColor, width: 1.6),
+                    color: hasText ? stateColor : accentColor, width: 1.6,),
               ),
             ),
           ),
@@ -172,7 +170,7 @@ class VideoLinkField extends StatelessWidget {
                         color: fillColor,
                         alignment: Alignment.center,
                         child: Icon(Icons.videocam_off_rounded,
-                            color: mutedColor, size: 18),
+                            color: mutedColor, size: 18,),
                       ),
                     ),
                   ),
@@ -185,7 +183,7 @@ class VideoLinkField extends StatelessWidget {
                       Row(
                         children: [
                           const Icon(Icons.check_circle_rounded,
-                              color: kPremiumGreen, size: 14),
+                              color: kPremiumGreen, size: 14,),
                           const SizedBox(width: 5),
                           Text(
                             'Video linked',
@@ -202,7 +200,7 @@ class VideoLinkField extends StatelessWidget {
                         'Customers will see a VIDEO badge and can watch '
                         'without leaving the app.',
                         style: GoogleFonts.outfit(
-                            color: mutedColor, fontSize: 10.5, height: 1.3),
+                            color: mutedColor, fontSize: 10.5, height: 1.3,),
                       ),
                     ],
                   ),
@@ -214,7 +212,7 @@ class VideoLinkField extends StatelessWidget {
             Row(
               children: [
                 const Icon(Icons.error_outline_rounded,
-                    color: Color(0xFFFF5252), size: 14),
+                    color: Color(0xFFFF5252), size: 14,),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(

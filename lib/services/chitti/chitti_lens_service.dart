@@ -28,7 +28,6 @@
 //   anything out loud. Getting a name wrong quietly on screen is a
 //   shrug; getting it wrong out loud in front of the person is not.
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -170,10 +169,10 @@ class ChittiLensService {
         return const LensResult(bestGuess: '', entities: [], pageTitles: []);
       }
 
-      final bestGuess = ((web['bestGuessLabels'] as List<dynamic>? ?? const [])
+      final bestGuess = (web['bestGuessLabels'] as List<dynamic>? ?? const [])
               .cast<Map<String, dynamic>>()
               .map((e) => (e['label'] as String?) ?? '')
-              .firstWhere((s) => s.trim().isNotEmpty, orElse: () => ''))
+              .firstWhere((s) => s.trim().isNotEmpty, orElse: () => '')
           .trim();
 
       final entities = <LensEntity>[];
@@ -184,7 +183,7 @@ class ChittiLensService {
         entities.add(LensEntity(
           description: d,
           score: (m['score'] as num?)?.toDouble() ?? 0,
-        ));
+        ),);
       }
       entities.sort((a, b) => b.score.compareTo(a.score));
 

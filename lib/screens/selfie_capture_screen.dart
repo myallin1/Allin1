@@ -93,7 +93,7 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
       if (mounted) {
         setState(() {
           _initError =
-              'Live camera preview isn\'t available in this browser — select a selfie photo instead.';
+              "Live camera preview isn't available in this browser — select a selfie photo instead.";
         });
       }
       return;
@@ -335,7 +335,7 @@ class _SelfieCaptureScreenState extends State<SelfieCaptureScreen> {
             const SizedBox(height: 20),
             if (_permissionPermanentlyDenied)
               ElevatedButton.icon(
-                onPressed: () => ph.openAppSettings(),
+                onPressed: ph.openAppSettings,
                 style: ElevatedButton.styleFrom(backgroundColor: _kPink),
                 icon: const Icon(Icons.settings_rounded, color: Colors.white),
                 label: Text(

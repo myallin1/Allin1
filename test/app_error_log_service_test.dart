@@ -287,4 +287,81 @@ void main() {
       expect(entry.hasAdminClaim, isNull);
     });
   });
+
+  group('Cross-app variant, category and resolution tracking', () {
+    test('AppErrorLogEntry serializes and deserializes variant, category and resolved', () {
+      final entry = AppErrorLogEntry(
+        id: 'err_variant_test',
+        date: '2026-09-19',
+        timestamp: '2026-09-19T10:00:00.000',
+        severity: 'ERROR',
+        screen: 'Seller Menu Screen',
+        errorMessage: 'Failed to update item price',
+        stackTrace: 'stack...',
+        appVersion: '1.0.0',
+        lastSeenAt: '2026-09-19T10:00:00.000',
+        appVariant: 'seller',
+        category: 'network',
+        resolved: true,
+        osPlatform: 'android',
+      );
+
+      final map = entry.toMap();
+      expect(map['appVariant'], 'seller');
+      expect(map['category'], 'network');
+      expect(map['resolved'], true);
+      expect(map['osPlatform'], 'android');
+
+      final reconstructed = AppErrorLogEntry.fromMap(map);
+      expect(reconstructed.appVariant, 'seller');
+      expect(reconstructed.category, 'network');
+      expect(reconstructed.resolved, true);
+      expect(reconstructed.osPlatform, 'android');
+    });
+
+    test('inferCategory correctly categorizes various error patterns', () {
+      expect(
+        AppErrorLogService.inferCategory(message: 'SocketException: Connection refused'),
+        'network',
+      );
+      expect(
+        AppErrorLogService.inferCategory(message: 'Cloud Firestore error: permission-denied'),
+        'permission',
+      );
+      expect(
+        AppErrorLogService.inferCategory(message: 'A RenderFlex overflowed by 24 pixels on the bottom.'),
+        'ui',
+      );
+      expect(
+        AppErrorLogService.inferCategory(message: 'PhonePe payment checkout cancelled'),
+        'payment',
+      );
+      expect(
+        AppErrorLogService.inferCategory(message: 'Geolocator location permission denied'),
+        'location',
+      );
+      expect(
+        AppErrorLogService.inferCategory(message: 'Unhandled Exception: Null check operator used on null value'),
+        'crash',
+      );
+    });
+
+    test('logError records custom appVariant and category into local store', () async {
+      final entry = await AppErrorLogService.logError(
+        message: 'SocketException during hero accept',
+        screen: 'Hero Accept Dialog',
+        appVariant: 'hero',
+        category: 'network',
+      );
+
+      expect(entry, isNotNull);
+      expect(entry!.appVariant, 'hero');
+      expect(entry.category, 'network');
+
+      final stored = await AppErrorLogService.getLogById(entry.id);
+      expect(stored, isNotNull);
+      expect(stored!.appVariant, 'hero');
+      expect(stored.category, 'network');
+    });
+  });
 }

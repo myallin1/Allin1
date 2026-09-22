@@ -56,7 +56,6 @@ class SellerAlertNotificationService {
         sound: RawResourceAndroidNotificationSound('ride_alert'),
         audioAttributesUsage: AudioAttributesUsage.alarm,
         enableLights: true,
-        playSound: true,
       );
       final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
@@ -105,8 +104,6 @@ class SellerAlertNotificationService {
             icon: '@mipmap/ic_launcher',
             sound: RawResourceAndroidNotificationSound('ride_alert'),
             audioAttributesUsage: AudioAttributesUsage.alarm,
-            enableVibration: true,
-            playSound: true,
           ),
           iOS: DarwinNotificationDetails(
             presentAlert: true,
@@ -123,7 +120,7 @@ class SellerAlertNotificationService {
   }
 
   static Future<void> handleNotificationResponse(
-      NotificationResponse response) async {
+      NotificationResponse response,) async {
     try {
       if (response.payload == null) return;
       final context = navigatorKey.currentContext;

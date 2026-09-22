@@ -80,7 +80,7 @@ class _AiLoadingDialogState extends State<AiLoadingDialog> with SingleTickerProv
   static const List<String> _texts = [
     'wait',
     'AI processing for u',
-    'Almost finish'
+    'Almost finish',
   ];
 
   @override
@@ -162,6 +162,6 @@ class _AiLoadingDialogState extends State<AiLoadingDialog> with SingleTickerProv
           ),
         ),
       ),
-    ));
+    ),);
   }
 }

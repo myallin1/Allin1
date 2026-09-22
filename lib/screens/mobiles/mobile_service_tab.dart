@@ -67,7 +67,7 @@ class _MobileIssue {
   final int? pinkSlot;
 
   const _MobileIssue(this.id, this.title, this.subtitle, this.icon, this.color,
-      {this.pinkSlot});
+      {this.pinkSlot,});
 }
 
 const List<_MobileIssue> _issues = [
@@ -77,26 +77,26 @@ const List<_MobileIssue> _issues = [
       'Cracked, blank, touch not working',
       Icons.phonelink_setup_rounded,
       Color(0xFFFF4FA3),
-      pinkSlot: 3),
+      pinkSlot: 3,),
   _MobileIssue('battery', 'Battery', 'Draining fast, not charging, swollen',
       Icons.battery_alert_rounded, Color(0xFF00C853),
-      pinkSlot: 1),
+      pinkSlot: 1,),
   _MobileIssue('charging', 'Charging Port', 'Loose, not charging, slow charge',
-      Icons.power_rounded, Color(0xFFFFBB00)),
+      Icons.power_rounded, Color(0xFFFFBB00),),
   _MobileIssue('water', 'Water Damage', 'Dropped in water, moisture damage',
       Icons.water_drop_rounded, Color(0xFF1565C0),
-      pinkSlot: 5),
+      pinkSlot: 5,),
   _MobileIssue('software', 'Software', 'Hang, restart loop, update, format',
       Icons.settings_suggest_rounded, Color(0xFF7B6FE0),
-      pinkSlot: 2),
+      pinkSlot: 2,),
   _MobileIssue('camera', 'Camera', 'Blur, not opening, glass broken',
-      Icons.photo_camera_rounded, Color(0xFF00BFA5)),
+      Icons.photo_camera_rounded, Color(0xFF00BFA5),),
   _MobileIssue('speaker', 'Speaker / Mic', 'No sound, call not audible',
-      Icons.volume_up_rounded, Color(0xFFFF6B35)),
+      Icons.volume_up_rounded, Color(0xFFFF6B35),),
   _MobileIssue('unlock', 'Unlocking', 'Pattern, FRP, network unlock',
-      Icons.lock_open_rounded, Color(0xFFBE2A7A)),
+      Icons.lock_open_rounded, Color(0xFFBE2A7A),),
   _MobileIssue('other', 'Other Issue', 'Tell us what happened',
-      Icons.help_outline_rounded, Color(0xFF9999BB)),
+      Icons.help_outline_rounded, Color(0xFF9999BB),),
 ];
 
 class MobileServiceTab extends StatelessWidget {
@@ -161,23 +161,19 @@ class MobileServiceTab extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          usePhoto
-                              // CHANGED (Nizam: "photo theme ah innum vera
-                              // level la set pannlam") — same shadow+ring
-                              // elevated-tile treatment used app-wide now.
-                              ? Container(
+                          if (usePhoto) Container(
                                   width: 42,
                                   height: 42,
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                        color: Colors.white, width: 1.5),
+                                        color: Colors.white, width: 1.5,),
                                     boxShadow: [
                                       BoxShadow(
                                           color: Colors.black
                                               .withValues(alpha: 0.18),
                                           blurRadius: 5,
-                                          offset: const Offset(0, 2)),
+                                          offset: const Offset(0, 2),),
                                     ],
                                   ),
                                   child: ClipRRect(
@@ -186,7 +182,6 @@ class MobileServiceTab extends StatelessWidget {
                                       photoUrl,
                                       width: 42,
                                       height: 42,
-                                      fit: BoxFit.cover,
                                       cacheWidth: 168,
                                       errorWidget: Container(
                                         width: 42,
@@ -197,12 +192,11 @@ class MobileServiceTab extends StatelessWidget {
                                           shape: BoxShape.circle,
                                         ),
                                         child: Icon(issue.icon,
-                                            color: issue.color, size: 21),
+                                            color: issue.color, size: 21,),
                                       ),
                                     ),
                                   ),
-                                )
-                              : usePink
+                                ) else usePink
                                   ? AutoImageSlider(
                                       imagePaths: [
                                         'assets/images/pink_icons/mobile_${issue.pinkSlot}_a.webp',
@@ -211,7 +205,6 @@ class MobileServiceTab extends StatelessWidget {
                                       width: 42,
                                       height: 42,
                                       fit: BoxFit.contain,
-                                      duration: const Duration(seconds: 3),
                                     )
                                   : Container(
                                       width: 42,
@@ -222,7 +215,7 @@ class MobileServiceTab extends StatelessWidget {
                                         shape: BoxShape.circle,
                                       ),
                                       child: Icon(issue.icon,
-                                          color: issue.color, size: 21),
+                                          color: issue.color, size: 21,),
                                     ),
                           const SizedBox(height: 8),
                           Text(

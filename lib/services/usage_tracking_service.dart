@@ -63,7 +63,7 @@ class UsageTrackingService {
         _dayKey(): <String, dynamic>{field: FieldValue.increment(1)},
       },
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    }, SetOptions(merge: true),);
   }
 
   Future<void> trackLandingPageVisit() async {
@@ -130,7 +130,7 @@ class UsageTrackingService {
     final cleaned = raw
         .toLowerCase()
         .trim()
-        .replaceAll(RegExp(r'[^a-z0-9 ]'), '')
+        .replaceAll(RegExp('[^a-z0-9 ]'), '')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     if (cleaned.isEmpty) return null;
@@ -148,7 +148,7 @@ class UsageTrackingService {
       await _demandDoc.set(<String, dynamic>{
         category: <String, dynamic>{key: FieldValue.increment(1)},
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true),);
     } catch (e) {
       debugPrint('[UsageTracking] _incrementDemand($category/$key) failed: $e');
     }
@@ -264,7 +264,7 @@ class UsageTrackingService {
       'services': services.map((k, v) => MapEntry(k, FieldValue.increment(v))),
       'backfilledAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    }, SetOptions(merge: true),);
 
     return BackfillResult(
       skipped: false,

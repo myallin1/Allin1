@@ -325,7 +325,7 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
             }
             unawaited(
               launchUrl(Uri.parse(request.url),
-                  mode: LaunchMode.externalApplication),
+                  mode: LaunchMode.externalApplication,),
             );
             return NavigationDecision.prevent;
           },
@@ -506,7 +506,7 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
         RegExp(r'^[\w.-]+\.\w{2,}(/.*)?$').hasMatch(input);
     if (looksLikeHost) return Uri.parse('https://$input');
     return Uri.parse(
-        'https://www.google.com/search?q=${Uri.encodeQueryComponent(input)}');
+        'https://www.google.com/search?q=${Uri.encodeQueryComponent(input)}',);
   }
 
   Future<void> _go(String raw) async {
@@ -613,7 +613,7 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
           title: Text(
             'Browser',
             style: GoogleFonts.outfit(
-                color: _text, fontWeight: FontWeight.w700, fontSize: 16),
+                color: _text, fontWeight: FontWeight.w700, fontSize: 16,),
           ),
         ),
         body: body,
@@ -703,7 +703,7 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
                 case 'external':
                   if (_currentUrl.isNotEmpty) {
                     await launchUrl(Uri.parse(_currentUrl),
-                        mode: LaunchMode.externalApplication);
+                        mode: LaunchMode.externalApplication,);
                   }
               }
             },
@@ -711,7 +711,7 @@ class _AdminWebBrowserScreenState extends State<AdminWebBrowserScreen> {
               _menuItem('forward', Icons.arrow_forward_rounded, 'Forward'),
               _menuItem('home', Icons.home_rounded, 'Home'),
               _menuItem(
-                  'external', Icons.open_in_new_rounded, 'Open in Chrome'),
+                  'external', Icons.open_in_new_rounded, 'Open in Chrome',),
             ],
           ),
         ],

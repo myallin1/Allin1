@@ -30,8 +30,8 @@ import '../services/cloudinary_upload_service.dart';
 import '../services/mobile_catalog_service.dart';
 import '../services/mobile_listing_service.dart';
 import '../widgets/cached_cloud_image.dart';
-import '../widgets/video_link_field.dart';
 import '../widgets/menu_photo_pick_crop.dart';
+import '../widgets/video_link_field.dart';
 
 const Color _bg = Color(0xFFF7FAF8);
 const Color _card = Color(0xFFFFFFFF);
@@ -53,10 +53,7 @@ class SellerMobileListingEditor extends StatefulWidget {
   final String initialCondition;
 
   const SellerMobileListingEditor({
-    super.key,
-    required this.sellerId,
-    required this.sellerName,
-    required this.sellerPhone,
+    required this.sellerId, required this.sellerName, required this.sellerPhone, super.key,
     this.existing,
     this.initialCondition = MobileCondition.isNew,
   });
@@ -243,6 +240,7 @@ class _SellerMobileListingEditorState extends State<SellerMobileListingEditor> {
 
       if (!mounted) return;
       Navigator.pop(context);
+      // ignore: avoid_catching_errors
     } on StateError catch (e) {
       // Listing-cap message from the service — show it as-is, it's
       // already customer-readable.
@@ -284,16 +282,16 @@ class _SellerMobileListingEditorState extends State<SellerMobileListingEditor> {
           _field(_variantCtrl, 'Variant', 'e.g. 8/256'),
           _field(_colorCtrl, 'Colour', 'e.g. Awesome Navy'),
           _field(_priceCtrl, 'Selling price (₹) *', '0',
-              keyboard: TextInputType.number),
+              keyboard: TextInputType.number,),
           _field(_mrpCtrl, 'Original price (₹)',
               'Optional — shows a discount badge',
-              keyboard: TextInputType.number),
+              keyboard: TextInputType.number,),
           _field(_warrantyCtrl, 'Warranty (months)', '0',
-              keyboard: TextInputType.number),
+              keyboard: TextInputType.number,),
           if (_isUsed) _buildGradePicker(),
           _field(_notesCtrl, _isUsed ? 'Condition details' : 'Notes',
               _isUsed ? 'Bill/box available, minor scratches…' : 'Optional',
-              maxLines: 3),
+              maxLines: 3,),
           _buildYoutubeField(),
           const SizedBox(height: 4),
           _buildPhotoSection(),
@@ -477,7 +475,7 @@ class _SellerMobileListingEditorState extends State<SellerMobileListingEditor> {
       onChanged: () => setState(() {}),
       label: 'Video of this phone',
       helper: 'A 30-second clip showing the phone switched on sells a used '
-          'device far better than photos. Upload it to your shop\'s YouTube '
+          "device far better than photos. Upload it to your shop's YouTube "
           'channel (free), then paste the share link here.',
       fillColor: _card,
       textColor: _text,
@@ -541,7 +539,7 @@ class _SellerMobileListingEditorState extends State<SellerMobileListingEditor> {
                   if (uploadOptional)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
+                          horizontal: 10, vertical: 6,),
                       decoration: BoxDecoration(
                         color: _green.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
@@ -565,7 +563,7 @@ class _SellerMobileListingEditorState extends State<SellerMobileListingEditor> {
                     ),
                     onPressed: _pickPhoto,
                     icon: const Icon(Icons.add_a_photo_outlined,
-                        color: _pink, size: 17),
+                        color: _pink, size: 17,),
                     label: Text(
                       hasOwn ? 'Change photo' : 'Upload photo',
                       style: GoogleFonts.outfit(color: _text, fontSize: 12.5),
@@ -599,8 +597,7 @@ class _SellerMobileListingEditorState extends State<SellerMobileListingEditor> {
       return Image.memory(_newPhotoBytes!, fit: BoxFit.cover);
     }
     if (_existingPhotoUrl != null && _existingPhotoUrl!.isNotEmpty) {
-      return CachedCloudImage(_existingPhotoUrl!,
-          fit: BoxFit.cover, cacheWidth: 220);
+      return CachedCloudImage(_existingPhotoUrl!, cacheWidth: 220,);
     }
     if (shared != null) {
       return CachedCloudImage(shared, fit: BoxFit.contain, cacheWidth: 220);
@@ -688,7 +685,7 @@ class _CatalogPickerSheetState extends State<_CatalogPickerSheet> {
         maxChildSize: 0.95,
         expand: false,
         builder: (context, scrollController) {
-          return Container(
+          return DecoratedBox(
             decoration: const BoxDecoration(
               color: _bg,
               borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -743,7 +740,7 @@ class _CatalogPickerSheetState extends State<_CatalogPickerSheet> {
                               'brand and model yourself.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.outfit(
-                                  color: _muted, fontSize: 13),
+                                  color: _muted, fontSize: 13,),
                             ),
                           ),
                         )
@@ -765,9 +762,9 @@ class _CatalogPickerSheetState extends State<_CatalogPickerSheet> {
                                 clipBehavior: Clip.antiAlias,
                                 child: p.imageUrl.isEmpty
                                     ? const Icon(Icons.smartphone_rounded,
-                                        color: _muted, size: 19)
+                                        color: _muted, size: 19,)
                                     : CachedCloudImage(p.imageUrl,
-                                        fit: BoxFit.contain, cacheWidth: 90),
+                                        fit: BoxFit.contain, cacheWidth: 90,),
                               ),
                               title: Text(
                                 p.model,
@@ -782,7 +779,7 @@ class _CatalogPickerSheetState extends State<_CatalogPickerSheet> {
                                     ? p.brand
                                     : '${p.brand} · ${p.variants.join(", ")}',
                                 style: GoogleFonts.outfit(
-                                    color: _muted, fontSize: 11),
+                                    color: _muted, fontSize: 11,),
                               ),
                             );
                           },

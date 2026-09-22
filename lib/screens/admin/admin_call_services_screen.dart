@@ -53,6 +53,7 @@ class AdminCallServicesScreen extends StatelessWidget {
           .collection(collection)
           .where('status', isEqualTo: 'new')
           .where('hasIntents', isEqualTo: true)
+          .limit(20)
           .snapshots();
 
   @override
@@ -78,7 +79,7 @@ class AdminCallServicesScreen extends StatelessWidget {
           if (snapshot.hasError) {
             return Center(
               child: Text('Could not load call services.',
-                  style: GoogleFonts.outfit(color: _muted)),
+                  style: GoogleFonts.outfit(color: _muted),),
             );
           }
           if (!snapshot.hasData) {
@@ -181,7 +182,7 @@ class _CallCard extends StatelessWidget {
             if (endedAt != null) ...[
               const SizedBox(height: 2),
               Text(_ago(endedAt),
-                  style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+                  style: GoogleFonts.outfit(color: _muted, fontSize: 11),),
             ],
             const SizedBox(height: 10),
             for (final intent in intents) _IntentLine(intent: intent),
@@ -194,13 +195,13 @@ class _CallCard extends StatelessWidget {
                     TextButton(
                       onPressed: () => doc.reference.update({'status': 'seen'}),
                       child: Text('Mark seen',
-                          style: GoogleFonts.outfit(color: _muted, fontSize: 12)),
+                          style: GoogleFonts.outfit(color: _muted, fontSize: 12),),
                     ),
                   TextButton(
                     onPressed: () => doc.reference.update({'status': 'resolved'}),
                     style: TextButton.styleFrom(foregroundColor: _green),
                     child: Text('Resolved',
-                        style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 12)),
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 12),),
                   ),
                 ],
               ),

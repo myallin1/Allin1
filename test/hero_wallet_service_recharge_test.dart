@@ -10,10 +10,9 @@
 // checks only add up to real protection together; either one alone
 // could be quietly wrong without the other catching it.
 // ================================================================
+import 'package:erode_superapp/services/hero_wallet_service.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:erode_superapp/services/hero_wallet_service.dart';
 
 void main() {
   const heroId = 'hero1';

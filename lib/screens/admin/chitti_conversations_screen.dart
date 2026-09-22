@@ -164,7 +164,7 @@ class _ConversationCardState extends State<_ConversationCard> {
     try {
       final prompt = 'A customer called our business ($caller). Here is what was said on '
           'the call (may be empty if only a recording exists):\n$transcript\n\n'
-          'Here is the admin\'s note after listening to the recording:\n$note\n\n'
+          "Here is the admin's note after listening to the recording:\n$note\n\n"
           'In under 80 words, write: 1) what the customer wants (one line), '
           '2) the concrete next step to do for this customer. Plain text, no '
           'markdown, no preamble.';
@@ -358,7 +358,7 @@ class _ConversationCardState extends State<_ConversationCard> {
                       icon: _generatingPlan
                           ? const SizedBox(
                               width: 14, height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),)
                           : const Icon(Icons.auto_awesome_rounded, size: 16),
                       label: const Text('Ask Chitti for next-step plan'),
                       style: ElevatedButton.styleFrom(

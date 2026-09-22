@@ -59,8 +59,7 @@ class ChittiProcessingSteps extends StatefulWidget {
   final String? footnote;
 
   const ChittiProcessingSteps({
-    super.key,
-    required this.steps,
+    required this.steps, super.key,
     this.footnote,
   });
 
@@ -72,7 +71,6 @@ class _ChittiProcessingStepsState extends State<ChittiProcessingSteps>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c;
 
-  static const Color _ink = Color(0xFFEEEEF5);
   static const Color _muted = Color(0xFF7777A0);
   static const Color _accent = Color(0xFF6C63FF);
   static const Color _ok = Color(0xFF00C853);
@@ -213,17 +211,17 @@ class _StepRow extends StatelessWidget {
                     : Center(
                         child: step.status == ChittiStepStatus.done
                             ? Icon(Icons.check_circle_rounded,
-                                size: 16, color: color)
+                                size: 16, color: color,)
                             : step.status == ChittiStepStatus.failed
                                 ? Icon(Icons.error_rounded,
-                                    size: 16, color: color)
+                                    size: 16, color: color,)
                                 : Container(
                                     width: 8,
                                     height: 8,
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       border: Border.all(
-                                          color: color.withValues(alpha: 0.5)),
+                                          color: color.withValues(alpha: 0.5),),
                                     ),
                                   ),
                       ),

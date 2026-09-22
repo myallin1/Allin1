@@ -19,7 +19,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/hero_wallet_model.dart';
 import '../../services/hero_wallet_service.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../../widgets/cached_cloud_image.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -256,7 +256,6 @@ class _AdminWalletApprovalsScreenState
                 request.screenshotUrl,
                 height: 160,
                 width: double.infinity,
-                fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Container(
                   height: 100,
                   alignment: Alignment.center,
@@ -318,4 +317,3 @@ class _AdminWalletApprovalsScreenState
     );
   }
 }
-

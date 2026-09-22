@@ -12,9 +12,8 @@
 // who put the phone in their pocket ten minutes ago.
 //
 // Everything here is about pinning those two.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/services/chitti/chitti_conversation_controller.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   late ChittiConversationController c;
@@ -86,7 +85,7 @@ void main() {
     test('ends after a completed task with nothing pending', () {
       expect(
         c.onUserSaid('cancel my order',
-            resolvedAnIntent: true, awaitingReply: false),
+            resolvedAnIntent: true, awaitingReply: false,),
         ChittiConversationStep.stop,
       );
     });
@@ -96,7 +95,7 @@ void main() {
       // in the middle of its own question.
       expect(
         c.onUserSaid('book a ride',
-            resolvedAnIntent: true, awaitingReply: true),
+            resolvedAnIntent: true, awaitingReply: true,),
         ChittiConversationStep.speak,
       );
       expect(c.isActive, isTrue);
@@ -116,7 +115,7 @@ void main() {
     test('a real utterance resets the silence count', () {
       c.onUserSaid('', resolvedAnIntent: false, awaitingReply: false);
       c.onUserSaid('what is my balance',
-          resolvedAnIntent: false, awaitingReply: false);
+          resolvedAnIntent: false, awaitingReply: false,);
       expect(c.emptyTurns, 0);
       // One silent turn after that must not end it.
       expect(
@@ -139,7 +138,7 @@ void main() {
     test('stays connected after a completed task', () {
       expect(
         c.onUserSaid('cancel my order',
-            resolvedAnIntent: true, awaitingReply: false),
+            resolvedAnIntent: true, awaitingReply: false,),
         ChittiConversationStep.speak,
       );
       expect(c.isActive, isTrue);
@@ -172,7 +171,7 @@ void main() {
       expect(idle.isActive, isFalse);
       expect(
         idle.onUserSaid('hello',
-            resolvedAnIntent: false, awaitingReply: false),
+            resolvedAnIntent: false, awaitingReply: false,),
         ChittiConversationStep.stop,
       );
     });

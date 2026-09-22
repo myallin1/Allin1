@@ -7,8 +7,8 @@
 // unanswered -- either a dead-end "I don't know" or an inconsistent
 // improvised reply from the cloud model each time. Fixed answers now,
 // answered offline, with no API key needed.
-import 'package:flutter_test/flutter_test.dart';
 import 'package:erode_superapp/services/chitti/chitti_local_answer_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('identity questions never fall through', () {

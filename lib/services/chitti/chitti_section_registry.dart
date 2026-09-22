@@ -33,6 +33,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../screens/admin/admin_ai_dev_studio_screen.dart';
 import '../../screens/admin/admin_ai_settings_screen.dart';
+import '../../screens/admin/admin_antigravity_bridge_screen.dart';
 import '../../screens/admin/admin_dashboard_screen.dart';
 import '../../screens/admin/admin_db_usage_screen.dart';
 import '../../screens/admin/admin_hero_dispatch_screen.dart';
@@ -77,6 +78,7 @@ import '../../screens/invite_friends_screen.dart';
 import '../../screens/live_rates_screen.dart';
 import '../../screens/mega_quiz_screen.dart';
 import '../../screens/mobiles/mobile_hub_screen.dart';
+import '../../screens/mobiles/signature_mobiles_screen.dart';
 import '../../screens/my_orders_screen.dart';
 import '../../screens/nj_tech_service_screen.dart';
 import '../../screens/nj_tech_store_screen.dart';
@@ -204,6 +206,15 @@ const List<ChittiSection> kChittiSections = <ChittiSection>[
     builder: _mobileHub,
     screenType: MobileHubScreen,
     aliases: ['mobile', 'phone', 'smartphone'],
+  ),
+  ChittiSection(
+    key: 'signature_mobiles',
+    label: 'Signature Mobiles & Spares',
+    description: 'NJ Tech Flagship store for new smartphones, certified pre-owned phones, and spares.',
+    variants: {'customer', 'admin'},
+    builder: _signatureMobiles,
+    screenType: SignatureMobilesScreen,
+    aliases: ['signature mobiles', 'signature store', 'buy phone', 'iphone', 'spares', 'mobile accessories'],
   ),
   ChittiSection(
     key: 'cart',
@@ -752,6 +763,15 @@ const List<ChittiSection> kChittiSections = <ChittiSection>[
     screenType: AdminAiSettingsScreen,
     aliases: ['ai settings', 'chitti settings', 'api key'],
   ),
+  ChittiSection(
+    key: 'admin_antigravity_bridge',
+    label: 'Antigravity IDE Remote Bridge',
+    description: 'Dispatch coding prompts, bug reports, and screenshots directly to the IDE.',
+    variants: {'admin'},
+    builder: _adminAntigravityBridge,
+    screenType: AdminAntigravityBridgeScreen,
+    aliases: ['antigravity', 'ide', 'remote ide', 'ide bridge', 'coding bridge'],
+  ),
 ];
 
 /// Sections legal for [variant], in registry order.
@@ -791,6 +811,7 @@ Widget _dmart(BuildContext _) => const DmartScreen();
 Widget _njTechService(BuildContext _) => const NjTechServiceScreen();
 Widget _njTechStore(BuildContext _) => const NJTechStoreScreen();
 Widget _mobileHub(BuildContext _) => const MobileHubScreen();
+Widget _signatureMobiles(BuildContext _) => const SignatureMobilesScreen();
 Widget _cart(BuildContext _) => const CartScreen();
 Widget _myOrders(BuildContext _) => const MyOrdersScreen();
 Widget _rideHistory(BuildContext _) => const RideHistoryScreen();
@@ -850,3 +871,5 @@ Widget _adminBugReports(BuildContext _) => const BugReportsScreen();
 Widget _adminDbUsage(BuildContext _) => const AdminDbUsageScreen();
 Widget _adminAiSettings(BuildContext _) => const AdminAiSettingsScreen();
 Widget _adminAiDevStudio(BuildContext _) => const AdminAiDevStudioScreen();
+Widget _adminAntigravityBridge(BuildContext _) => const AdminAntigravityBridgeScreen();
+

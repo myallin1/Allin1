@@ -95,7 +95,7 @@ class ChittiModel {
 
 /// The backends this app knows how to talk to.
 ///
-/// Order matters: [kChittiModels.first] is the default, and the
+/// Order matters: `kChittiModels.first` is the default, and the
 /// fallback order when a chosen model has no key.
 const List<ChittiModel> kChittiModels = <ChittiModel>[
   ChittiModel(
@@ -257,7 +257,7 @@ Map<String, String> chittiRequestHeaders({
   };
 }
 
-/// The first model that has a usable key, starting from [preferred].
+/// The first model that has a usable key, starting from [preferredId].
 ///
 /// [keyFor] is injected rather than read here so this stays a pure
 /// function — the key sources (dart-define, prefs) live in the service

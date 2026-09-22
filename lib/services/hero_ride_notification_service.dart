@@ -116,7 +116,7 @@ class HeroRideNotificationService {
     // for a live tap.
     try {
       final launchDetails = await _plugin.getNotificationAppLaunchDetails();
-      if (launchDetails?.didNotificationLaunchApp == true &&
+      if ((launchDetails?.didNotificationLaunchApp ?? false) &&
           launchDetails?.notificationResponse != null) {
         await handleNotificationResponse(launchDetails!.notificationResponse!);
       }
@@ -319,9 +319,6 @@ class HeroRideNotificationService {
         priority: Priority.max,
         category: AndroidNotificationCategory.call,
         visibility: NotificationVisibility.public,
-        // FIX (Aug 20 2026): fullScreenIntent caused the phone to lock/freeze
-        // on the notification screen and disturb the user. Changed to false.
-        fullScreenIntent: false,
         ongoing: showDetails,
         autoCancel: !showDetails,
         // FIX (Nizam's "notification icon namma pink theme ku maathu"):
@@ -334,7 +331,6 @@ class HeroRideNotificationService {
         // which Android's own notification renderer controls and no
         // app can override — see the actions list below, unchanged).
         color: const Color(0xFFFF4FA3),
-        colorized: false,
         // 0ms delay, vibrate 1sec, pause 0.5sec, vibrate 1sec, pause 0.5sec, vibrate 1sec
         vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
         ticker: ticker,

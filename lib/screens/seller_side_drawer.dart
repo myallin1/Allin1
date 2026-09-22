@@ -8,8 +8,8 @@
 // and the shared DownloadAppBanner for brand/PWA-promotion consistency
 // with the other 3 apps. Adding `drawer:` to SellerDashboardScreen's
 // Scaffold makes Flutter auto-show the hamburger icon in its AppBar.
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
 import '../models/food_models.dart';
 import '../widgets/download_app_banner.dart';
@@ -54,7 +54,7 @@ class SellerSideDrawer extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    user?.displayName?.trim().isNotEmpty == true ? user!.displayName! : 'Seller',
+                    user?.displayName?.trim().isNotEmpty ?? false ? user!.displayName! : 'Seller',
                     style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
                   ),
                   if (user?.email != null)
@@ -90,7 +90,7 @@ class SellerSideDrawer extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Usage Fee Wallet', style: TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w600)),
+                          const Text('Usage Fee Wallet', style: TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w600)),
                           const SizedBox(height: 4),
                           Text(
                             '₹${seller!.walletBalance.toStringAsFixed(2)}',

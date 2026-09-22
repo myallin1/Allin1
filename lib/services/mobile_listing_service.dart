@@ -33,8 +33,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/mobile_models.dart';
-import 'db_usage_tracker.dart';
 import './firestore_usage_tracking.dart';
+import 'db_usage_tracker.dart';
 
 class MobileListingService {
   MobileListingService({FirebaseFirestore? firestore})

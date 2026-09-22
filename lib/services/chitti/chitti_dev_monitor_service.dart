@@ -263,9 +263,9 @@ class ChittiDevMonitorService {
     try {
       final results = await Future.wait([
         http.get(Uri.parse('$base/actions/runs?per_page=$limit'),
-            headers: headers),
+            headers: headers,),
         http.get(Uri.parse('$base/issues?state=all&per_page=$limit'),
-            headers: headers),
+            headers: headers,),
         http.get(Uri.parse('$base/releases/latest'), headers: headers),
       ]);
 
@@ -304,7 +304,7 @@ class ChittiDevMonitorService {
             branch: (m['head_branch'] as String?) ?? '',
             url: (m['html_url'] as String?) ?? '',
             updatedAt: DateTime.tryParse((m['updated_at'] as String?) ?? ''),
-          ));
+          ),);
         }
       }
 
@@ -322,7 +322,7 @@ class ChittiDevMonitorService {
             state: (m['state'] as String?) ?? 'open',
             url: (m['html_url'] as String?) ?? '',
             updatedAt: DateTime.tryParse((m['updated_at'] as String?) ?? ''),
-          ));
+          ),);
         }
       }
 
@@ -360,7 +360,7 @@ class ChittiDevMonitorService {
             sizeBytes: (asset['size'] as num?)?.toInt() ?? 0,
             updatedAt:
                 DateTime.tryParse((asset['updated_at'] as String?) ?? ''),
-          ));
+          ),);
         }
         apks.sort((a, b) {
           final at = a.updatedAt;
@@ -382,7 +382,7 @@ class ChittiDevMonitorService {
       }
 
       return DevMonitorSnapshot(
-          runs: runs, issues: issues, latestRelease: latest);
+          runs: runs, issues: issues, latestRelease: latest,);
     } catch (e) {
       return DevMonitorSnapshot(
         runs: empty.runs,
@@ -444,7 +444,7 @@ class ChittiDevMonitorService {
     try {
       if (prNumber != null) {
         final res = await http.get(Uri.parse('$base/pulls/$prNumber'),
-            headers: headers);
+            headers: headers,);
         if (res.statusCode == 404) {
           return (
             pullRequests: <DevPullRequest>[],
@@ -472,7 +472,7 @@ class ChittiDevMonitorService {
 
       final res = await http.get(
         Uri.parse(
-            '$base/pulls?state=all&sort=updated&direction=desc&per_page=$limit'),
+            '$base/pulls?state=all&sort=updated&direction=desc&per_page=$limit',),
         headers: headers,
       );
       if (res.statusCode == 401 || res.statusCode == 403) {
@@ -530,7 +530,7 @@ class ChittiDevMonitorService {
     try {
       final res = await http.get(
         Uri.parse(
-            '$_apiBase/repos/${repo.owner}/${repo.name}/releases/tags/latest-admin-test'),
+            '$_apiBase/repos/${repo.owner}/${repo.name}/releases/tags/latest-admin-test',),
         headers: headers,
       );
       if (res.statusCode == 404) {

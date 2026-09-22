@@ -288,7 +288,7 @@ class _ChittiLayerState extends State<_ChittiLayer> {
     final pos = widget.position.value;
     final centreX = pos.dx + _kSize / 2;
     final toLeft = centreX < screen.width / 2;
-    final hidden = _kSize * _kTuckFraction;
+    const hidden = _kSize * _kTuckFraction;
     widget.position.value = Offset(
       toLeft ? -hidden : screen.width - _kSize + hidden,
       pos.dy,
@@ -388,7 +388,6 @@ class _ChittiLayerState extends State<_ChittiLayer> {
                       builder: (context, act, ___) => ChittiCompanion(
                         mood: m,
                         activity: act,
-                        size: _kSize,
                         // A tucked Chitti's first tap only brings him
                         // back out; the second opens the chat.
                         onTap: () {

@@ -43,8 +43,8 @@ class HiveCache {
   static const ttlSellerOrders = Duration(hours: 1);
   static const ttlHomeBannerOffers = Duration(hours: 1);
 
-  static Future<Box> _box() async {
-    if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);
+  static Future<Box<dynamic>> _box() async {
+    if (Hive.isBoxOpen(_boxName)) return Hive.box<dynamic>(_boxName);
     // HiveCache is shared across every app entrypoint (customer, hero,
     // seller). Only main_customer.dart calls Hive.initFlutter() at
     // startup — callers like the hero app's notification dedup
@@ -52,7 +52,7 @@ class HiveCache {
     // openBox() with no storage path configured. initFlutter() is
     // idempotent/safe to call again if another entrypoint already did.
     await Hive.initFlutter();
-    return await Hive.openBox(_boxName);
+    return await Hive.openBox<dynamic>(_boxName);
   }
 
   static Future<void> put(String key, value, {Duration ttl = const Duration(minutes: 30)}) async {
@@ -73,17 +73,17 @@ class HiveCache {
 
   static Future<void> cacheUserProfile(Map<String, dynamic> profileData) async {
     // 30 mins TTL is fine, as changes are explicitly written back to cache on edit
-    await put(kUserProfile, profileData, ttl: ttlUserProfile);
+    await put(kUserProfile, profileData);
   }
 
   static Future<Map<String, dynamic>?> getCachedUserProfile() async {
-    final data = await get<Map>(kUserProfile);
+    final data = await get<Map<dynamic, dynamic>>(kUserProfile);
     if (data == null) return null;
     return Map<String, dynamic>.from(data);
   }
 
   static Future<List<Map<String, dynamic>>?> getCachedErodeOffers() async {
-    final list = await get<List>(kErodeOffers);
+    final list = await get<List<dynamic>>(kErodeOffers);
     if (list == null) return null;
     return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
@@ -93,10 +93,11 @@ class HiveCache {
   }
 
   static Future<List<Map<String, dynamic>>?> getCachedSellerOrders(String sellerId) async {
-    final list = await get<List>('${kSellerOrders}_$sellerId');
+    final list = await get<List<dynamic>>('${kSellerOrders}_$sellerId');
     if (list == null) return null;
     return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
+
 
   static Future<T?> get<T>(String key) async {
     try {

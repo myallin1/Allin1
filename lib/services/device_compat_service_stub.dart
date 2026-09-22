@@ -1,5 +1,5 @@
-import 'update_service.dart';
 import 'device_compat_service.dart';
+import 'update_service.dart';
 
 // FIX: same broken architecture-split filenames as
 // device_compat_service_web.dart — pointed at customer-arm64.apk /

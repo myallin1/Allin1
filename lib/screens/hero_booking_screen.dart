@@ -21,23 +21,23 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
 import '../services/auth_prompt_service.dart';
+import '../services/auth_service.dart';
 import '../services/location_service.dart';
 import '../services/map_service.dart';
 import '../services/recent_places_service.dart';
 import '../services/service_request_service.dart';
 import '../services/shared_location_inbox.dart';
+import '../services/theme_context_extensions.dart';
 import '../services/theme_service.dart';
 import '../utils/location_link_parser.dart';
 import '../utils/service_request_labels.dart';
 import '../widgets/allin1_map_widget.dart';
 import '../widgets/cached_cloud_image.dart';
 import '../widgets/quick_order_line_items.dart';
-import '../services/auth_service.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'hero_booking_status_screen.dart';
 import 'hero_search_radar_screen.dart';
 import 'location_picker_screen.dart';
-import '../services/theme_context_extensions.dart';
 // Batch 1 retrofit: former hardcoded hex constants (_kPink, _kPinkDark,
 // _kPinkBg, _kBg, _kSurface, _kText, _kMuted, _kBorder) removed in favor
 // of context.colors.* (theme_context_extensions.dart) so this screen is
@@ -48,7 +48,7 @@ import '../services/theme_context_extensions.dart';
 
 class HeroBookingScreen extends StatefulWidget {
   const HeroBookingScreen(
-      {super.key, this.initialCategory = 'pickup_delivery'});
+      {super.key, this.initialCategory = 'pickup_delivery',});
 
   /// Which kHeroBookingCategories key the form opens on. Defaults to
   /// 'pickup_delivery' for the dashboard's own Hero Booking mega card;
@@ -190,7 +190,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.place_rounded,
-                    color: context.colors.accent, size: 18),
+                    color: context.colors.accent, size: 18,),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -361,8 +361,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       for (final locale in locales) {
         final id = locale.localeId.replaceAll('-', '_').toLowerCase();
         if (id == wanted.toLowerCase()) {
-          _resolvedSpeechLocaleId = locale.localeId;
-          return _resolvedSpeechLocaleId;
+          return _resolvedSpeechLocaleId = locale.localeId;
         }
       }
       // No exact ta_IN — take any Tamil variant.
@@ -547,7 +546,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Please describe your task first!'),
-            backgroundColor: Colors.red),
+            backgroundColor: Colors.red,),
       );
       return;
     }
@@ -578,7 +577,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         .where((it) => !it.isEmpty)
         .map((it) => [it.name.trim(), it.qty.trim()]
             .where((s) => s.isNotEmpty)
-            .join(' '))
+            .join(' '),)
         .join(', ');
 
     setState(() => _submitting = true);
@@ -664,14 +663,14 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new_rounded,
-              color: context.colors.text, size: 20),
+              color: context.colors.text, size: 20,),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('Hero Booking',
             style: GoogleFonts.outfit(
                 color: context.colors.text,
                 fontWeight: FontWeight.w800,
-                fontSize: 18)),
+                fontSize: 18,),),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -686,7 +685,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 color: context.colors.accent.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                    color: context.colors.accent.withValues(alpha: 0.2)),
+                    color: context.colors.accent.withValues(alpha: 0.2),),
               ),
               child: Row(
                 children: [
@@ -700,12 +699,12 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                             style: GoogleFonts.outfit(
                                 color: context.colors.text,
                                 fontWeight: FontWeight.w800,
-                                fontSize: 14)),
+                                fontSize: 14,),),
                         const SizedBox(height: 2),
                         Text(
                             "Errands, deliveries, help with tasks — describe it and we'll send the nearest available Hero.",
                             style: TextStyle(
-                                color: context.colors.mutedText, fontSize: 11)),
+                                color: context.colors.mutedText, fontSize: 11,),),
                       ],
                     ),
                   ),
@@ -751,7 +750,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 style: GoogleFonts.outfit(
                     color: context.colors.text,
                     fontSize: 17,
-                    fontWeight: FontWeight.w700)),
+                    fontWeight: FontWeight.w700,),),
             const SizedBox(height: 10),
             _HeroTaskIdeasMarquee(
               onSelect: (key) => setState(() => _selectedCategory = key),
@@ -763,7 +762,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 style: GoogleFonts.outfit(
                     color: context.colors.text,
                     fontSize: 17,
-                    fontWeight: FontWeight.w700)),
+                    fontWeight: FontWeight.w700,),),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -778,7 +777,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   style: GoogleFonts.outfit(
                       color: context.colors.text,
                       fontSize: 17,
-                      fontWeight: FontWeight.w700)),
+                      fontWeight: FontWeight.w700,),),
               const SizedBox(height: 8),
               _locationField(
                 controller: _fromLocationCtrl,
@@ -790,7 +789,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   style: GoogleFonts.outfit(
                       color: context.colors.text,
                       fontSize: 17,
-                      fontWeight: FontWeight.w700)),
+                      fontWeight: FontWeight.w700,),),
               const SizedBox(height: 8),
               _locationField(
                 controller: _locationCtrl,
@@ -802,7 +801,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   style: GoogleFonts.outfit(
                       color: context.colors.text,
                       fontSize: 17,
-                      fontWeight: FontWeight.w700)),
+                      fontWeight: FontWeight.w700,),),
               const SizedBox(height: 8),
               _locationField(
                 controller: _locationCtrl,
@@ -817,12 +816,11 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 style: GoogleFonts.outfit(
                     color: context.colors.text,
                     fontSize: 17,
-                    fontWeight: FontWeight.w700)),
+                    fontWeight: FontWeight.w700,),),
             const SizedBox(height: 8),
             QuickOrderLineItemsForm(
               items: _lineItems,
               itemLabel: 'Task',
-              qtyLabel: 'Qty',
               onChanged: (items) => setState(() => _lineItems = items),
             ),
             const SizedBox(height: 10),
@@ -838,14 +836,14 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.add_circle_rounded,
-                          color: context.colors.accent, size: 16),
+                          color: context.colors.accent, size: 16,),
                       const SizedBox(width: 6),
                       Text(
                         'Add more details (optional)',
                         style: GoogleFonts.outfit(
                             color: context.colors.accentSecondary,
                             fontSize: 12,
-                            fontWeight: FontWeight.w700),
+                            fontWeight: FontWeight.w700,),
                       ),
                     ],
                   ),
@@ -856,7 +854,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   style: GoogleFonts.outfit(
                       color: context.colors.text,
                       fontSize: 17,
-                      fontWeight: FontWeight.w700)),
+                      fontWeight: FontWeight.w700,),),
               const SizedBox(height: 8),
               _voiceTextField(
                 controller: _instructionsCtrl,
@@ -871,7 +869,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                 style: GoogleFonts.outfit(
                     color: context.colors.text,
                     fontSize: 17,
-                    fontWeight: FontWeight.w700)),
+                    fontWeight: FontWeight.w700,),),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -897,7 +895,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                   child: Row(
                     children: [
                       Icon(Icons.schedule_rounded,
-                          color: context.colors.accent, size: 18),
+                          color: context.colors.accent, size: 18,),
                       const SizedBox(width: 10),
                       Text(
                         _scheduledAt != null
@@ -906,7 +904,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                         style: GoogleFonts.outfit(
                             color: context.colors.text,
                             fontSize: 17,
-                            fontWeight: FontWeight.w600),
+                            fontWeight: FontWeight.w600,),
                       ),
                     ],
                   ),
@@ -938,7 +936,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                       shadowColor: context.colors.accent.withValues(alpha: 0.4),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
+                          borderRadius: BorderRadius.circular(16),),
                     ),
                     onPressed: _submitting ? null : _submit,
                     icon: _submitting
@@ -946,14 +944,14 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
+                                color: Colors.white, strokeWidth: 2,),)
                         : const Icon(Icons.bolt_rounded,
-                            color: Colors.white, size: 18),
+                            color: Colors.white, size: 18,),
                     label: Text('Find Me a Hero',
                         style: GoogleFonts.outfit(
                             color: Colors.white,
                             fontSize: 17,
-                            fontWeight: FontWeight.bold)),
+                            fontWeight: FontWeight.bold,),),
                   ),
                 ),
               ),
@@ -966,20 +964,20 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                           BorderSide(color: context.colors.accent, width: 1.4),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
+                          borderRadius: BorderRadius.circular(16),),
                     ),
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) => const HeroBookingStatusScreen()),
+                          builder: (_) => const HeroBookingStatusScreen(),),
                     ),
                     icon: Icon(Icons.receipt_long_rounded,
-                        color: context.colors.accent, size: 18),
+                        color: context.colors.accent, size: 18,),
                     label: Text('Booking Status',
                         style: GoogleFonts.outfit(
                             color: context.colors.accent,
                             fontSize: 17,
-                            fontWeight: FontWeight.bold)),
+                            fontWeight: FontWeight.bold,),),
                   ),
                 ),
               ),
@@ -1008,7 +1006,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
               color:
-                  isSelected ? context.colors.accent : context.colors.border),
+                  isSelected ? context.colors.accent : context.colors.border,),
           boxShadow: isSelected
               ? [
                   BoxShadow(
@@ -1044,7 +1042,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
               color:
-                  isSelected ? context.colors.accent : context.colors.border),
+                  isSelected ? context.colors.accent : context.colors.border,),
           boxShadow: isSelected
               ? [
                   BoxShadow(
@@ -1160,7 +1158,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         }
         return;
       }
-      final pos = position!;
+      final pos = position;
       final result = await _mapService.reverseGeocode(
         LatLng(pos.latitude, pos.longitude),
       );
@@ -1384,13 +1382,13 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         content: Text(
           message,
           style: TextStyle(
-              color: context.colors.mutedText, fontSize: 17, height: 1.45),
+              color: context.colors.mutedText, fontSize: 17, height: 1.45,),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: Text('Close',
-                style: TextStyle(color: context.colors.mutedText)),
+                style: TextStyle(color: context.colors.mutedText),),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -1719,12 +1717,12 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
         hintText: hint,
         hintStyle: TextStyle(
             color: context.colors.mutedText.withValues(alpha: 0.7),
-            fontSize: 13),
+            fontSize: 13,),
         filled: true,
         fillColor: context.colors.surface,
         border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none),
+            borderSide: BorderSide.none,),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         suffixIcon: Padding(
@@ -1740,7 +1738,7 @@ class _HeroBookingScreenState extends State<HeroBookingScreen> {
                       ? [context.colors.accent, context.colors.accentSecondary]
                       : [
                           context.colors.accent.withValues(alpha: 0.16),
-                          context.colors.accent.withValues(alpha: 0.08)
+                          context.colors.accent.withValues(alpha: 0.08),
                         ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -1786,37 +1784,37 @@ const List<Map<String, String>> _kHeroTaskIdeas = [
     'icon': '\u{1F4E6}',
     'label': 'Parcel Pickup & Delivery',
     'category': 'pickup_delivery',
-    'photoKey': 'parcel'
+    'photoKey': 'parcel',
   },
   {
     'icon': '\u{1F6D2}',
     'label': 'Grocery Run & Medicine Pickup',
     'category': 'errand',
-    'photoKey': 'grocery'
+    'photoKey': 'grocery',
   },
   {
     'icon': '\u{1F4C4}',
     'label': 'Bill Payment & Document Drop',
     'category': 'paperwork',
-    'photoKey': 'paperwork'
+    'photoKey': 'paperwork',
   },
   {
     'icon': '\u{1F475}',
     'label': 'Help for Elders',
     'category': 'other',
-    'photoKey': 'elders'
+    'photoKey': 'elders',
   },
   {
     'icon': '\u{1F382}',
     'label': 'Midnight Cake Delivery',
     'category': 'custom_order',
-    'photoKey': 'cake'
+    'photoKey': 'cake',
   },
   {
     'icon': '\u{1F4AA}',
     'label': 'Hero as Bouncer',
     'category': 'other',
-    'photoKey': 'bouncer'
+    'photoKey': 'bouncer',
   },
 ];
 
@@ -1859,7 +1857,7 @@ class _HeroTaskIdeasMarquee extends StatefulWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(ObjectFlagProperty<void Function(String categoryKey)>.has(
-        'onSelect', onSelect));
+        'onSelect', onSelect,),);
   }
 }
 
@@ -1931,8 +1929,7 @@ class _HeroTaskIdeasMarqueeState extends State<_HeroTaskIdeasMarquee> {
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    usePhoto
-                        ? Container(
+                    if (usePhoto) Container(
                             width: 34,
                             height: 34,
                             decoration: BoxDecoration(
@@ -1943,7 +1940,7 @@ class _HeroTaskIdeasMarqueeState extends State<_HeroTaskIdeasMarquee> {
                                 BoxShadow(
                                     color: Colors.black.withValues(alpha: 0.18),
                                     blurRadius: 4,
-                                    offset: const Offset(0, 2)),
+                                    offset: const Offset(0, 2),),
                               ],
                             ),
                             child: ClipRRect(
@@ -1952,15 +1949,13 @@ class _HeroTaskIdeasMarqueeState extends State<_HeroTaskIdeasMarquee> {
                                 photoUrl,
                                 width: 34,
                                 height: 34,
-                                fit: BoxFit.cover,
                                 cacheWidth: 136,
                                 errorWidget: Text(idea['icon']!,
-                                    style: const TextStyle(fontSize: 26)),
+                                    style: const TextStyle(fontSize: 26),),
                               ),
                             ),
-                          )
-                        : Text(idea['icon']!,
-                            style: const TextStyle(fontSize: 26)),
+                          ) else Text(idea['icon']!,
+                            style: const TextStyle(fontSize: 26),),
                     const SizedBox(height: 6),
                     Text(
                       idea['label']!,
@@ -1975,7 +1970,7 @@ class _HeroTaskIdeasMarqueeState extends State<_HeroTaskIdeasMarquee> {
                     ),
                   ],
                 );
-              }),
+              },),
             ),
           );
         },

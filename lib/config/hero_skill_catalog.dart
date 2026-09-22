@@ -155,50 +155,50 @@ class HeroSkill {
 /// The bookable trades, in the order they appear in both the hero
 /// onboarding picker and the customer services grid.
 final List<HeroSkill> kHeroSkills = <HeroSkill>[
-  HeroSkill(
+  const HeroSkill(
     key: 'electrician',
     title: 'Electrician',
     tamilTitle: 'மின் பணியாளர்',
     subtitle: 'Wiring, switches, fans, repairs',
     icon: Icons.electrical_services_rounded,
     svgIcon: FluentEmojiFlat.electric_plug,
-    color: const Color(0xFFF5A623),
+    color: Color(0xFFF5A623),
   ),
-  HeroSkill(
+  const HeroSkill(
     key: 'plumber',
     title: 'Plumber',
     tamilTitle: 'பிளம்பர்',
     subtitle: 'Taps, pipes, leaks, fittings',
     icon: Icons.plumbing_rounded,
     svgIcon: FluentEmojiFlat.wrench,
-    color: const Color(0xFF2D9CDB),
+    color: Color(0xFF2D9CDB),
   ),
-  HeroSkill(
+  const HeroSkill(
     key: 'laptop_pc',
     title: 'Laptop & PC',
     tamilTitle: 'லேப்டாப் & பிசி',
     subtitle: 'Service, software, upgrades',
     icon: Icons.laptop_chromebook_rounded,
     svgIcon: FluentEmojiFlat.laptop,
-    color: const Color(0xFF9B51E0),
+    color: Color(0xFF9B51E0),
   ),
-  HeroSkill(
+  const HeroSkill(
     key: 'tv_service',
     title: 'TV Service',
     tamilTitle: 'டிவி சர்வீஸ்',
     subtitle: 'Panel, display, installation',
     icon: Icons.tv_rounded,
     svgIcon: FluentEmojiFlat.television,
-    color: const Color(0xFF27AE60),
+    color: Color(0xFF27AE60),
   ),
-  HeroSkill(
+  const HeroSkill(
     key: 'fridge_ac',
     title: 'Fridge & AC',
     tamilTitle: 'ஃப்ரிட்ஜ் & ஏசி',
     subtitle: 'Cooling, gas filling, service',
     icon: Icons.ac_unit_rounded,
     svgIcon: FluentEmojiFlat.snowflake,
-    color: const Color(0xFF56CCF2),
+    color: Color(0xFF56CCF2),
   ),
 ];
 

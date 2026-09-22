@@ -10,9 +10,9 @@
 //      whether to stay open being told to "support a local shop today".
 //   2. A pool small enough that the same line comes back within a week,
 //      which turns a daily habit into wallpaper.
-import 'package:flutter_test/flutter_test.dart';
 import 'package:erode_superapp/services/daily_quote_service.dart';
 import 'package:erode_superapp/services/tamil_transliteration.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final svc = DailyQuoteService.instance;
@@ -24,7 +24,7 @@ void main() {
       for (final e in sizes.entries) {
         // Three slots a day, so 60 lines is ~20 days before a repeat.
         expect(e.value, greaterThanOrEqualTo(60),
-            reason: '${e.key} pool is only ${e.value} lines');
+            reason: '${e.key} pool is only ${e.value} lines',);
       }
     });
 
@@ -34,7 +34,7 @@ void main() {
       for (final role in ['customer', 'hero', 'seller', 'admin']) {
         final q = svc.forRole(role, 'en', now: at);
         expect(seen.add(q), isTrue,
-            reason: '$role repeated another role\'s line: $q');
+            reason: "$role repeated another role's line: $q",);
       }
     });
 

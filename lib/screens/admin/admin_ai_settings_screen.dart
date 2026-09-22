@@ -1228,7 +1228,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                               color: Colors.green, size: 22,),
                           onPressed: () async {
                             final file = File(localAudioPath);
-                            if (await file.exists()) {
+                            if (file.existsSync()) {
                               await SharePlus.instance.share(
                                 ShareParams(
                                   files: [XFile(localAudioPath)],
@@ -1251,7 +1251,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                               color: Colors.orange, size: 20,),
                           onPressed: () async {
                             final file = File(localTranscriptPath);
-                            if (await file.exists()) {
+                            if (file.existsSync()) {
                               await SharePlus.instance.share(
                                 ShareParams(
                                   files: [XFile(localTranscriptPath)],
@@ -1269,7 +1269,7 @@ class _AdminAiSettingsScreenState extends State<AdminAiSettingsScreen>
                           onPressed: () async {
                             try {
                               final file = File(localAudioPath);
-                              if (await file.exists()) {
+                              if (file.existsSync()) {
                                 final bytes = await file.readAsBytes();
                                 final cleanNumber =
                                     phone.replaceAll(RegExp('[^0-9+]'), '');

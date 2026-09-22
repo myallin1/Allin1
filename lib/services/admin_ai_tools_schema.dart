@@ -44,7 +44,7 @@ const Set<String> kAdminKnownActions = {
 /// Same wording Groq's extractAgentAction already uses, so switching
 /// the active agent never changes how eagerly the Admin AI acts.
 const String kAdminToolSystemPrompt =
-    'You are the CTO\'s admin co-pilot. Your default behavior is to '
+    "You are the CTO's admin co-pilot. Your default behavior is to "
     'ACT by calling one of your five tools, not to reply with '
     'step-by-step instructions telling the CTO what to click '
     'themselves — if a request matches a tool even loosely, call '

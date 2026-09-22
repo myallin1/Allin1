@@ -85,7 +85,7 @@ class _AdminPaymentReconciliationScreenState
         })
         .toList()
       ..sort((a, b) => ((b['createdAtMs'] as num?) ?? 0)
-          .compareTo((a['createdAtMs'] as num?) ?? 0));
+          .compareTo((a['createdAtMs'] as num?) ?? 0),);
   }
 
   Color _statusColor(String status) {
@@ -164,7 +164,7 @@ class _AdminPaymentReconciliationScreenState
                         Text(
                           '${docs.length} orders • ${_range.label}',
                           style: GoogleFonts.outfit(
-                              color: _muted, fontWeight: FontWeight.w600),
+                              color: _muted, fontWeight: FontWeight.w600,),
                         ),
                         if (cascadeFailedCount > 0)
                           Padding(
@@ -174,7 +174,7 @@ class _AdminPaymentReconciliationScreenState
                               style: GoogleFonts.outfit(
                                   color: _red,
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 11.5),
+                                  fontSize: 11.5,),
                             ),
                           ),
                       ],
@@ -222,13 +222,13 @@ class _AdminPaymentReconciliationScreenState
                                 child: Text(
                                   'Order ${data['requestId']}',
                                   style: GoogleFonts.outfit(
-                                      color: _text, fontWeight: FontWeight.w700),
+                                      color: _text, fontWeight: FontWeight.w700,),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
+                                    horizontal: 8, vertical: 3,),
                                 decoration: BoxDecoration(
                                   color: _statusColor(status).withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(8),
@@ -252,8 +252,7 @@ class _AdminPaymentReconciliationScreenState
                             style: GoogleFonts.outfit(color: _muted, fontSize: 11),
                           ),
                           if ((data['gatewayTransactionId'] as String?)
-                                  ?.isNotEmpty ==
-                              true)
+                                  ?.isNotEmpty ?? false)
                             Padding(
                               padding: const EdgeInsets.only(top: 2),
                               child: Text(
@@ -262,8 +261,7 @@ class _AdminPaymentReconciliationScreenState
                               ),
                             ),
                           if (status == 'failed' &&
-                              (data['failureReason'] as String?)?.isNotEmpty ==
-                                  true)
+                              ((data['failureReason'] as String?)?.isNotEmpty ?? false))
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(
@@ -282,7 +280,7 @@ class _AdminPaymentReconciliationScreenState
                               child: Row(
                                 children: [
                                   const Icon(Icons.warning_amber_rounded,
-                                      color: _red, size: 16),
+                                      color: _red, size: 16,),
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: Text(
@@ -291,7 +289,7 @@ class _AdminPaymentReconciliationScreenState
                                       style: GoogleFonts.outfit(
                                           color: _red,
                                           fontSize: 10.5,
-                                          fontWeight: FontWeight.w600),
+                                          fontWeight: FontWeight.w600,),
                                     ),
                                   ),
                                 ],

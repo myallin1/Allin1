@@ -124,24 +124,24 @@ class ChittiLocalAnswerService {
 
   static final RegExp _howAreYouAsk = RegExp(
     r'\bhow (are|r) (you|u|ya)\b|how.?s it going|how do you feel|'
-    r'(எப்படி இருக்க|எப்படி இருக்கீங்க|சௌக்கியமா)',
+    '(எப்படி இருக்க|எப்படி இருக்கீங்க|சௌக்கியமா)',
   );
 
   static final RegExp _whoAreYouAsk = RegExp(
     r'\bwho (are|r) (you|u)\b|\bwhat are you\b|introduce yourself|'
-    r'(நீ யாரு|உன் பேரு என்ன|நீங்க யாரு)',
+    '(நீ யாரு|உன் பேரு என்ன|நீங்க யாரு)',
   );
 
   static final RegExp _ownerAsk = RegExp(
-    r"\bwho.?s your (owner|creator|boss|maker)\b|who made you|"
-    r'who built you|who created you|who owns you|'
-    r'(உன்ன யாரு உருவாக்கின|உன் முதலாளி யாரு|உன்ன யாரு பண்ணாங்க)',
+    r'\bwho.?s your (owner|creator|boss|maker)\b|who made you|'
+    'who built you|who created you|who owns you|'
+    '(உன்ன யாரு உருவாக்கின|உன் முதலாளி யாரு|உன்ன யாரு பண்ணாங்க)',
   );
 
   static final RegExp _birthAsk = RegExp(
-    r"\b(your )?birth ?place\b|where (were|are) you (born|from|made)|"
+    r'\b(your )?birth ?place\b|where (were|are) you (born|from|made)|'
     r'\bwhere do you live\b|'
-    r'(உன் பிறந்த இடம்|எங்க பொறந்த|எங்க உருவானே)',
+    '(உன் பிறந்த இடம்|எங்க பொறந்த|எங்க உருவானே)',
   );
 
   static ChittiLocalAnswer? _aboutIdentity(String q, bool ta) {
@@ -179,7 +179,7 @@ class ChittiLocalAnswerService {
       return ChittiLocalAnswer(
         ta
             ? 'நான் தான் உங்க சிட்டி பாஸ்! நம்ம Allin1 ஆப்போட சொந்த அசிஸ்டெண்ட். உங்க வண்டியை புக் பண்றது, வாலெட்டை பாத்துக்கிறது எல்லாமே நான் செய்வேன்!'
-            : 'I\'m Chitti — MyAllin1\'s own AI, boss. Half assistant, half troublemaker. I book your rides, watch your wallet, and keep you company while I\'m at it.',
+            : "I'm Chitti — MyAllin1's own AI, boss. Half assistant, half troublemaker. I book your rides, watch your wallet, and keep you company while I'm at it.",
         suggestions: ta
             ? const <String>['நீ என்ன பண்ணுவ?', 'என் வாலெட் பேலன்ஸ்']
             : const <String>['What can you do?', 'My wallet balance'],
@@ -281,10 +281,10 @@ class ChittiLocalAnswerService {
     return ChittiLocalAnswer(
       ta
           ? "நிறைய வேலைகளைச் செய்வேன் பாஸ்:\n${lines.join('\n')}\n"
-              "நெட்வொர்க் இல்லை என்றாலும் கூட பேசிக் வேலைகள் நடக்கும். உங்களுக்கு என்ன வேணும்னு சும்மா கேளுங்க பாஸ்!"
+              'நெட்வொர்க் இல்லை என்றாலும் கூட பேசிக் வேலைகள் நடக்கும். உங்களுக்கு என்ன வேணும்னு சும்மா கேளுங்க பாஸ்!'
           : "Quite a lot, boss:\n${lines.join('\n')}\n"
-              "Most of it works even with no internet. Just tell me what you "
-              "want — no need for exact words.",
+              'Most of it works even with no internet. Just tell me what you '
+              'want — no need for exact words.',
       suggestions: ta
           ? const <String>['இந்த பக்கம் என்ன?', 'என் வாலெட் பேலன்ஸ்', 'என் ஆர்டர்']
           : const <String>[
@@ -313,25 +313,25 @@ class ChittiLocalAnswerService {
 
   static final RegExp _refundOrCancelPolicyAsk = RegExp(
     r'\brefund\b|cancellation (policy|charge|fee)|cancel.*(fee|charge)|'
-    r'(ரிபண்ட்|கேன்சல்.*சார்ஜ்|கேன்சல் பண்ணா.*பணம்)',
+    '(ரிபண்ட்|கேன்சல்.*சார்ஜ்|கேன்சல் பண்ணா.*பணம்)',
   );
 
   static final RegExp _paymentMethodsAsk = RegExp(
     r'\b(payment (method|option)s?|how (do|can) i pay|pay by|upi|'
     r'accept (cash|card|upi))\b|'
-    r'(எப்படி பணம் கட்டுறது|பேமெண்ட் மெத்தட்|காஷ் வாங்குவீங்களா)',
+    '(எப்படி பணம் கட்டுறது|பேமெண்ட் மெத்தட்|காஷ் வாங்குவீங்களா)',
   );
 
   static final RegExp _contactSupportAsk = RegExp(
     r'\b(customer care|support number|helpline|contact (you|support|nj tech)|'
     r'call center|talk to (a )?human|real person|complaint)\b|'
-    r'(கஸ்டமர் கேர்|சப்போர்ட் நம்பர்|யாரையாவது பேச முடியுமா|காம்ப்ளைன்ட்)',
+    '(கஸ்டமர் கேர்|சப்போர்ட் நம்பர்|யாரையாவது பேச முடியுமா|காம்ப்ளைன்ட்)',
   );
 
   static final RegExp _appTroubleAsk = RegExp(
     r'\b(app (not working|hanging|crashed|stuck|frozen)|not (loading|opening)|'
     r'blank screen|keeps loading)\b|'
-    r'(ஆப் ஓபன் ஆகல|ஹேங் ஆகிடுச்சு|லோட் ஆகல)',
+    '(ஆப் ஓபன் ஆகல|ஹேங் ஆகிடுச்சு|லோட் ஆகல)',
   );
 
   static ChittiLocalAnswer? _aboutSupportAndPayments(String q, bool ta) {

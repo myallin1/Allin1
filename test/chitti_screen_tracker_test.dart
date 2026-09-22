@@ -6,13 +6,12 @@
 // through the one helper, and CHITTI'S OWN navigation did too — so
 // Chitti would open Food Genie for you and then not know you were on
 // Food Genie. These pin the label resolution that fix depends on.
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/screens/food_hub_screen.dart';
 import 'package:erode_superapp/screens/my_orders_screen.dart';
 import 'package:erode_superapp/services/chitti/chitti_screen_tracker.dart';
 import 'package:erode_superapp/services/chitti/chitti_section_registry.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 class _UnregisteredScreen extends StatelessWidget {
   const _UnregisteredScreen();
@@ -40,7 +39,7 @@ void main() {
     test('the route carries the label so the observer can read it', () {
       final route = ChittiNav.route<void>(const FoodHubScreen());
       expect((route.settings.arguments! as ChittiRouteLabel).label,
-          'Food Genie');
+          'Food Genie',);
     });
 
     test('the label NEVER goes in name — PathUrlStrategy asserts on it', () {
@@ -58,7 +57,7 @@ void main() {
         'Food Genie',
       );
       expect((route.settings.arguments! as ChittiRouteLabel).label,
-          'Food Genie');
+          'Food Genie',);
       expect(route.settings.name, isNull);
     });
 

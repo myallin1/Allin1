@@ -92,7 +92,7 @@ Future<Uint8List> compressImage(
       final canvas = web.document.createElement('canvas') as web.HTMLCanvasElement
         ..width = w
         ..height = h;
-      final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
+      final ctx = canvas.getContext('2d')! as web.CanvasRenderingContext2D;
       ctx.drawImage(imgEl, 0, 0, w, h);
 
       for (final quality in _qualitySteps) {

@@ -94,7 +94,7 @@ class _MobileServiceSheetState extends State<_MobileServiceSheet> {
       return;
     }
     if (!await requireRealAuth(context,
-        reason: 'Sign in to book a mobile repair')) {
+        reason: 'Sign in to book a mobile repair',)) {
       return;
     }
     final user = FirebaseAuth.instance.currentUser;
@@ -152,14 +152,14 @@ class _MobileServiceSheetState extends State<_MobileServiceSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
+          bottom: MediaQuery.of(context).viewInsets.bottom,),
       child: DraggableScrollableSheet(
         initialChildSize: 0.85,
         minChildSize: 0.5,
         maxChildSize: 0.95,
         expand: false,
         builder: (context, scrollController) {
-          return Container(
+          return DecoratedBox(
             decoration: const BoxDecoration(
               color: kMobBg,
               borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -196,13 +196,13 @@ class _MobileServiceSheetState extends State<_MobileServiceSheet> {
                       ),
                       const SizedBox(height: 18),
                       _field(_phoneModelCtrl, 'Phone model *',
-                          'e.g. Redmi Note 13 5G'),
+                          'e.g. Redmi Note 13 5G',),
                       _field(_issueCtrl, 'Describe the problem',
                           'Optional — more detail helps us quote faster',
-                          maxLines: 3),
+                          maxLines: 3,),
                       _field(_nameCtrl, 'Your name', 'Optional'),
                       _field(_contactCtrl, 'Contact number *', '9XXXXXXXXX',
-                          keyboard: TextInputType.phone),
+                          keyboard: TextInputType.phone,),
                       const SizedBox(height: 4),
                       Text(
                         'Pickup address',
@@ -216,7 +216,6 @@ class _MobileServiceSheetState extends State<_MobileServiceSheet> {
                       LocationCaptureField(
                         addressController: _addressCtrl,
                         pickerTitle: 'Select pickup location',
-                        accentColor: kMobPink,
                         onLocationPicked: (lat, lng) {
                           _lat = lat;
                           _lng = lng;

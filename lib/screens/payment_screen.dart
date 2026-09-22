@@ -10,11 +10,11 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/payment_config.dart';
+import '../services/firestore_usage_tracking.dart';
 import '../services/localization_service.dart';
 import '../widgets/animated_meter_fare.dart';
 import '../widgets/rating_feedback_sheet.dart';
 import 'bike_taxi/bike_booking_screen.dart';
-import '../services/firestore_usage_tracking.dart';
 
 const Color _card = Colors.white;
 const Color _card2 = Color(0xFFFFEEF7);

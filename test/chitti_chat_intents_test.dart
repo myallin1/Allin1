@@ -8,10 +8,9 @@
 //
 // So the rule these pin is blunt: every chip Chitti offers must be
 // handled, and no reply may be a dead end.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/config/app_variant.dart';
 import 'package:erode_superapp/services/chitti/chitti_chat_intents.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final original = currentAppVariant;

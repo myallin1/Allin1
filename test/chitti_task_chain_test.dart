@@ -6,9 +6,8 @@
 // silently if they break: a chain that runs unapproved, a chain that
 // keeps going after a failure, or a forty-step plan from a confused
 // model. None of those announce themselves — hence tests.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/services/chitti/chitti_task_chain.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   Map<String, dynamic> step(String action) => <String, dynamic>{'action': action};

@@ -247,7 +247,7 @@ class _EnquiryCard extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Quote for ${enquiry.customerName.trim().isEmpty ? "this customer" : enquiry.customerName.trim()}',
-            style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w800),),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,7 +256,7 @@ class _EnquiryCard extends StatelessWidget {
             if (enquiry.marketReference.isNotEmpty) ...[
               const SizedBox(height: 6),
               Text('Chitti showed: ${enquiry.marketReference}',
-                  style: GoogleFonts.outfit(fontSize: 11, fontStyle: FontStyle.italic, color: palette.muted)),
+                  style: GoogleFonts.outfit(fontSize: 11, fontStyle: FontStyle.italic, color: palette.muted),),
             ],
             const SizedBox(height: 12),
             TextField(
@@ -282,7 +282,7 @@ class _EnquiryCard extends StatelessWidget {
     );
     if (rate == null || rate.isEmpty) return;
 
-    var digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    var digits = phone.replaceAll(RegExp('[^0-9]'), '');
     if (digits.length == 10) digits = '91$digits';
     final message = 'Hi${enquiry.customerName.trim().isEmpty ? '' : ' ${enquiry.customerName.trim()}'}, '
         'this is NJ Tech, Erode. Regarding your enquiry — "${enquiry.question}":\n\n$rate\n\n'

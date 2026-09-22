@@ -40,7 +40,7 @@ import '../app_navigator.dart' show chittiRouteObserver;
 import '../services/chitti_memory_service.dart';
 
 class ChittiScreenTag extends StatefulWidget {
-  const ChittiScreenTag({super.key, required this.label, required this.child});
+  const ChittiScreenTag({required this.label, required this.child, super.key});
 
   /// Short, human-readable name Chitti can reason about directly in a
   /// prompt (e.g. "Food Dashboard") — not a route path or class name.

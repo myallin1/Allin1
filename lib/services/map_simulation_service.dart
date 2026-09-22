@@ -16,8 +16,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../widgets/allin1_map_widget.dart' show MapMarker;
 import '../config/ride_catalog.dart';
+import '../widgets/allin1_map_widget.dart' show MapMarker;
 import 'osm_provider.dart';
 
 
@@ -25,52 +25,52 @@ import 'osm_provider.dart';
 List<List<LatLng>> _erodeTrafficLoops = <List<LatLng>>[
   // Perundurai Road
   <LatLng>[
-    LatLng(11.3195, 77.6830),
-    LatLng(11.3250, 77.6900),
-    LatLng(11.3320, 77.7000),
-    LatLng(11.3400, 77.7100),
+    const LatLng(11.3195, 77.6830),
+    const LatLng(11.3250, 77.6900),
+    const LatLng(11.3320, 77.7000),
+    const LatLng(11.3400, 77.7100),
   ],
   // Brough Road
   <LatLng>[
-    LatLng(11.3400, 77.7100),
-    LatLng(11.3420, 77.7135),
-    LatLng(11.3450, 77.7170),
+    const LatLng(11.3400, 77.7100),
+    const LatLng(11.3420, 77.7135),
+    const LatLng(11.3450, 77.7170),
   ],
   // Bhavani Road
   <LatLng>[
-    LatLng(11.3450, 77.7170),
-    LatLng(11.3600, 77.7050),
-    LatLng(11.3800, 77.6950),
-    LatLng(11.4000, 77.6900),
+    const LatLng(11.3450, 77.7170),
+    const LatLng(11.3600, 77.7050),
+    const LatLng(11.3800, 77.6950),
+    const LatLng(11.4000, 77.6900),
   ],
   // EVN Road
   <LatLng>[
-    LatLng(11.3400, 77.7100),
-    LatLng(11.3350, 77.7150),
-    LatLng(11.3300, 77.7200),
+    const LatLng(11.3400, 77.7100),
+    const LatLng(11.3350, 77.7150),
+    const LatLng(11.3300, 77.7200),
   ],
   // Chennimalai Road
   <LatLng>[
-    LatLng(11.3300, 77.7200),
-    LatLng(11.3100, 77.7100),
-    LatLng(11.2900, 77.7000),
+    const LatLng(11.3300, 77.7200),
+    const LatLng(11.3100, 77.7100),
+    const LatLng(11.2900, 77.7000),
   ],
 ];
 
 // 3. Outskirts Lorries (Spread out) on Ring Road
 List<List<LatLng>> _outskirtsTrafficLoops = <List<LatLng>>[
   <LatLng>[
-    LatLng(11.2900, 77.7000),
-    LatLng(11.3000, 77.7300),
-    LatLng(11.3200, 77.7500),
-    LatLng(11.3500, 77.7600),
-    LatLng(11.3800, 77.7400),
-    LatLng(11.4000, 77.7100),
-    LatLng(11.4000, 77.6800),
-    LatLng(11.3800, 77.6500),
-    LatLng(11.3400, 77.6400),
-    LatLng(11.3100, 77.6600),
-    LatLng(11.2900, 77.7000),
+    const LatLng(11.2900, 77.7000),
+    const LatLng(11.3000, 77.7300),
+    const LatLng(11.3200, 77.7500),
+    const LatLng(11.3500, 77.7600),
+    const LatLng(11.3800, 77.7400),
+    const LatLng(11.4000, 77.7100),
+    const LatLng(11.4000, 77.6800),
+    const LatLng(11.3800, 77.6500),
+    const LatLng(11.3400, 77.6400),
+    const LatLng(11.3100, 77.6600),
+    const LatLng(11.2900, 77.7000),
   ],
 ];
 
@@ -370,7 +370,7 @@ class MapSimulationService extends ChangeNotifier {
     final provider = OSMProvider();
     
     Future<List<LatLng>> enrichLoop(List<LatLng> loop) async {
-      List<LatLng> enriched = [];
+      final List<LatLng> enriched = [];
       for (int i = 0; i < loop.length - 1; i++) {
         final route = await provider.getRoute(loop[i], loop[i+1]);
         if (route != null && route.points.isNotEmpty) {
@@ -564,7 +564,7 @@ class MapSimulationService extends ChangeNotifier {
         direction: heroRandom.nextBool() ? 1 : -1,
         speedStep: 0.015 + (heroRandom.nextDouble() - 0.5) * 0.005,
         seed: heroRandom.nextInt(1000000),
-      ));
+      ),);
     }
 
     // Single global timer to optimize performance and prevent CPU drain
@@ -624,7 +624,7 @@ class MapSimulationService extends ChangeNotifier {
         icon: Icons.person_pin,
         size: 40,
         circular: true,
-      ));
+      ),);
     }
 
     _simulatedMarkers = markers;

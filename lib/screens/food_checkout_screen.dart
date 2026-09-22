@@ -297,7 +297,7 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
         _textField(_nameCtrl, 'Your name', Icons.person_rounded),
         const SizedBox(height: 10),
         _textField(_phoneCtrl, 'Phone number', Icons.call_rounded,
-            keyboardType: TextInputType.phone),
+            keyboardType: TextInputType.phone,),
         const SizedBox(height: 24),
         _orderSummaryCard(),
         const SizedBox(height: 24),
@@ -312,7 +312,7 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
             ),
             child: Text('Continue to Payment',
                 style: GoogleFonts.outfit(
-                    color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14.5)),
+                    color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14.5,),),
           ),
         ),
         const SizedBox(height: 20),
@@ -366,11 +366,11 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
                   Expanded(
                     child: Text('Pay via UPI now',
                         style: GoogleFonts.outfit(
-                            color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
+                            color: _kText, fontWeight: FontWeight.w800, fontSize: 14,),),
                   ),
                   Text('₹${widget.subtotal.toStringAsFixed(0)}',
                       style: GoogleFonts.outfit(
-                          color: _kPinkDark, fontWeight: FontWeight.w800, fontSize: 14)),
+                          color: _kPinkDark, fontWeight: FontWeight.w800, fontSize: 14,),),
                 ],
               ),
               const SizedBox(height: 10),
@@ -386,7 +386,7 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
                   ),
                   icon: const Icon(Icons.qr_code_rounded, size: 18),
                   label: Text(_upiOpened ? 'Open UPI App Again' : 'Open UPI App',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 13)),
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 13),),
                 ),
               ),
               if (_upiOpened) ...[
@@ -409,7 +409,7 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
                         : const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
                     label: Text("I've Paid — Confirm Order",
                         style: GoogleFonts.outfit(
-                            color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13.5)),
+                            color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13.5,),),
                   ),
                 ),
               ],
@@ -421,7 +421,7 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
           onPressed: () => setState(() => _step = 0),
           icon: const Icon(Icons.arrow_back_rounded, size: 16, color: _kMuted),
           label: Text('Edit delivery details',
-              style: GoogleFonts.outfit(color: _kMuted, fontSize: 12.5)),
+              style: GoogleFonts.outfit(color: _kMuted, fontSize: 12.5),),
         ),
       ],
     );
@@ -453,10 +453,10 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
                 children: [
                   Text(title,
                       style: GoogleFonts.outfit(
-                          color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
+                          color: _kText, fontWeight: FontWeight.w800, fontSize: 14,),),
                   const SizedBox(height: 2),
                   Text(subtitle,
-                      style: GoogleFonts.outfit(color: _kMuted, fontSize: 11.5)),
+                      style: GoogleFonts.outfit(color: _kMuted, fontSize: 11.5),),
                 ],
               ),
             ),
@@ -484,10 +484,10 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
                 children: [
                   Text('Ordering from',
                       style: GoogleFonts.outfit(
-                          color: Colors.white.withValues(alpha: 0.85), fontSize: 11)),
+                          color: Colors.white.withValues(alpha: 0.85), fontSize: 11,),),
                   Text(widget.hotelName,
                       style: GoogleFonts.outfit(
-                          color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15.5)),
+                          color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15.5,),),
                 ],
               ),
             ),
@@ -507,7 +507,7 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
           children: [
             Text('Order Summary',
                 style: GoogleFonts.outfit(
-                    color: _kText, fontWeight: FontWeight.w800, fontSize: 13.5)),
+                    color: _kText, fontWeight: FontWeight.w800, fontSize: 13.5,),),
             const SizedBox(height: 10),
             ...widget.items.map((item) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
@@ -515,24 +515,24 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
                     children: [
                       Expanded(
                         child: Text('${item['name']} x${item['quantity']}',
-                            style: GoogleFonts.outfit(color: _kText, fontSize: 12.5)),
+                            style: GoogleFonts.outfit(color: _kText, fontSize: 12.5),),
                       ),
                       Text('₹${(item['total'] as num).toStringAsFixed(0)}',
                           style: GoogleFonts.outfit(
-                              color: _kText, fontWeight: FontWeight.w700, fontSize: 12.5)),
+                              color: _kText, fontWeight: FontWeight.w700, fontSize: 12.5,),),
                     ],
                   ),
-                )),
+                ),),
             const Divider(height: 20, color: Color(0xFFFFEAF3)),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Total',
                     style: GoogleFonts.outfit(
-                        color: _kText, fontWeight: FontWeight.w800, fontSize: 14)),
+                        color: _kText, fontWeight: FontWeight.w800, fontSize: 14,),),
                 Text('₹${widget.subtotal.toStringAsFixed(0)}',
                     style: GoogleFonts.outfit(
-                        color: _kPinkDark, fontWeight: FontWeight.w800, fontSize: 16)),
+                        color: _kPinkDark, fontWeight: FontWeight.w800, fontSize: 16,),),
               ],
             ),
           ],
@@ -540,7 +540,7 @@ class _FoodCheckoutScreenState extends State<FoodCheckoutScreen> {
       );
 
   Widget _sectionLabel(String text) => Text(text,
-      style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 13.5));
+      style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w800, fontSize: 13.5),);
 
   Widget _textField(
     TextEditingController ctrl,

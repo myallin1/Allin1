@@ -101,7 +101,7 @@ class EconomicVisionScreen extends StatelessWidget {
 
   // ── Header ────────────────────────────────────────────────────
   Widget _header() {
-    return Container(
+    return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [_pink, _pinkDark],
@@ -126,7 +126,7 @@ class EconomicVisionScreen extends StatelessWidget {
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontSize: 11,
-                        fontWeight: FontWeight.w700)),
+                        fontWeight: FontWeight.w700,),),
               ),
               const SizedBox(height: 10),
               PulseGlowText(
@@ -135,25 +135,25 @@ class EconomicVisionScreen extends StatelessWidget {
                       color: Colors.white,
                       fontSize: 36,
                       fontWeight: FontWeight.w900,
-                      height: 1.05)),
+                      height: 1.05,),),
               const SizedBox(height: 4),
               Text(EconomicVisionData.heroCaption,
                   style: GoogleFonts.outfit(
                       color: Colors.white.withValues(alpha: 0.94),
                       fontSize: 13.5,
-                      height: 1.35)),
+                      height: 1.35,),),
               const SizedBox(height: 8),
               Row(
                 children: [
                   const Icon(Icons.south_west_rounded,
-                      color: Colors.white, size: 15),
+                      color: Colors.white, size: 15,),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(EconomicVisionData.heroRally,
                         style: GoogleFonts.outfit(
                             color: Colors.white,
                             fontSize: 12,
-                            fontWeight: FontWeight.w700)),
+                            fontWeight: FontWeight.w700,),),
                   ),
                 ],
               ),
@@ -166,7 +166,7 @@ class EconomicVisionScreen extends StatelessWidget {
 
   Widget _sectionTitle(String s) => Text(s,
       style: GoogleFonts.outfit(
-          color: _text, fontSize: 15.5, fontWeight: FontWeight.w800));
+          color: _text, fontSize: 15.5, fontWeight: FontWeight.w800,),);
 
   Widget _shell({required Widget child}) => Container(
         width: double.infinity,
@@ -203,7 +203,7 @@ class EconomicVisionScreen extends StatelessWidget {
                     style: GoogleFonts.outfit(
                         color: _pinkDark,
                         fontSize: 23,
-                        fontWeight: FontWeight.w900)),
+                        fontWeight: FontWeight.w900,),),
                 const SizedBox(width: 6),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 5),
@@ -211,18 +211,18 @@ class EconomicVisionScreen extends StatelessWidget {
                       style: GoogleFonts.outfit(
                           color: _pinkDark,
                           fontSize: 15,
-                          fontWeight: FontWeight.w800)),
+                          fontWeight: FontWeight.w800,),),
                 ),
               ],
             ),
             Text('கோடி வெளியேறுகிறது.',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 12.5)),
+                style: GoogleFonts.outfit(color: _muted, fontSize: 12.5),),
             const SizedBox(height: 16),
             const Divider(height: 1, color: _card),
             const SizedBox(height: 14),
             Text('5 ஆண்டுகளில் (சந்தை வளர்ச்சியுடன்)',
                 style: GoogleFonts.outfit(
-                    color: _text, fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    color: _text, fontSize: 12.5, fontWeight: FontWeight.w700,),),
             const SizedBox(height: 12),
             ..._yearRows(),
             const SizedBox(height: 12),
@@ -241,7 +241,7 @@ class EconomicVisionScreen extends StatelessWidget {
                         style: GoogleFonts.outfit(
                             color: _pinkDark,
                             fontSize: 15,
-                            fontWeight: FontWeight.w900)),
+                            fontWeight: FontWeight.w900,),),
                   ),
                 ],
               ),
@@ -259,7 +259,7 @@ class EconomicVisionScreen extends StatelessWidget {
                   SizedBox(
                     width: 54,
                     child: Text(y.$1,
-                        style: GoogleFonts.outfit(color: _muted, fontSize: 11.5)),
+                        style: GoogleFonts.outfit(color: _muted, fontSize: 11.5),),
                   ),
                   Expanded(
                     child: ClipRRect(
@@ -280,11 +280,11 @@ class EconomicVisionScreen extends StatelessWidget {
                         style: GoogleFonts.outfit(
                             color: _text,
                             fontSize: 11.5,
-                            fontWeight: FontWeight.w700)),
+                            fontWeight: FontWeight.w700,),),
                   ),
                 ],
               ),
-            ))
+            ),)
         .toList();
   }
 
@@ -340,7 +340,7 @@ class EconomicVisionScreen extends StatelessWidget {
                 child: Text(
                   EconomicVisionData.sectorFootnote,
                   style: GoogleFonts.outfit(
-                      color: _muted, fontSize: 11, height: 1.4),
+                      color: _muted, fontSize: 11, height: 1.4,),
                 ),
               ),
             ],
@@ -370,11 +370,11 @@ class EconomicVisionScreen extends StatelessWidget {
                     style: GoogleFonts.outfit(
                         color: color,
                         fontSize: 11.5,
-                        fontWeight: FontWeight.w800)),
+                        fontWeight: FontWeight.w800,),),
                 const SizedBox(height: 1),
                 Text(note,
                     style: GoogleFonts.outfit(
-                        color: _muted, fontSize: 10, height: 1.35)),
+                        color: _muted, fontSize: 10, height: 1.35,),),
               ],
             ),
           ),
@@ -403,14 +403,14 @@ class EconomicVisionScreen extends StatelessWidget {
                       style: GoogleFonts.outfit(
                           color: _text,
                           fontSize: 12,
-                          fontWeight: FontWeight.w700)),
+                          fontWeight: FontWeight.w700,),),
                 ),
                 const SizedBox(width: 12),
                 Text(r.amount,
                     style: GoogleFonts.outfit(
                         color: _pinkDark,
                         fontSize: 11,
-                        fontWeight: FontWeight.w800)),
+                        fontWeight: FontWeight.w800,),),
               ],
             ),
             const SizedBox(height: 7),
@@ -454,19 +454,19 @@ class EconomicVisionScreen extends StatelessWidget {
                                 style: GoogleFonts.outfit(
                                     color: _pinkDark,
                                     fontSize: 14,
-                                    fontWeight: FontWeight.w800)),
+                                    fontWeight: FontWeight.w800,),),
                             const SizedBox(height: 6),
                             Text(point.$2,
                                 style: GoogleFonts.outfit(
                                     color: _text,
                                     fontSize: 12.5,
-                                    height: 1.4)),
+                                    height: 1.4,),),
                           ],
                         ),
                       ),
                     ],
                   ),
-                )),
+                ),),
           ],
         ),
       );
@@ -515,12 +515,12 @@ class EconomicVisionScreen extends StatelessWidget {
                 style: GoogleFonts.outfit(
                     color: Colors.white,
                     fontSize: 15,
-                    fontWeight: FontWeight.w900)),
+                    fontWeight: FontWeight.w900,),),
             const SizedBox(height: 14),
             ...EconomicVisionData.solutionRows.map((r) => Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: _solutionRow(r.$1, r.$2, r.$3),
-            )),
+            ),),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
@@ -534,7 +534,7 @@ class EconomicVisionScreen extends StatelessWidget {
                 style: GoogleFonts.outfit(
                     color: Colors.white,
                     fontSize: 13,
-                    fontWeight: FontWeight.w800),
+                    fontWeight: FontWeight.w800,),
               ),
             ),
           ],
@@ -561,11 +561,11 @@ class EconomicVisionScreen extends StatelessWidget {
                     style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontSize: 17,
-                        fontWeight: FontWeight.w900)),
+                        fontWeight: FontWeight.w900,),),
                 Text(label,
                     style: GoogleFonts.outfit(
                         color: Colors.white.withValues(alpha: 0.92),
-                        fontSize: 11.5)),
+                        fontSize: 11.5,),),
               ],
             ),
           ),
@@ -579,7 +579,7 @@ class EconomicVisionScreen extends StatelessWidget {
           children: [
             Text('📌  தொழில்துறை உண்மைகள்',
                 style: GoogleFonts.outfit(
-                    color: _text, fontSize: 14, fontWeight: FontWeight.w800)),
+                    color: _text, fontSize: 14, fontWeight: FontWeight.w800,),),
             const SizedBox(height: 14),
             ...EconomicVisionData.industryFacts.map((f) => _fact(f.$1, f.$2)),
           ],
@@ -597,14 +597,14 @@ class EconomicVisionScreen extends StatelessWidget {
                   style: GoogleFonts.outfit(
                       color: _pinkDark,
                       fontSize: 16,
-                      fontWeight: FontWeight.w900)),
+                      fontWeight: FontWeight.w900,),),
             ),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.only(top: 3),
                 child: Text(label,
                     style: GoogleFonts.outfit(
-                        color: _muted, fontSize: 11.5, height: 1.45)),
+                        color: _muted, fontSize: 11.5, height: 1.45,),),
               ),
             ),
           ],
@@ -627,13 +627,13 @@ class EconomicVisionScreen extends StatelessWidget {
             Text(EconomicVisionData.ctaTitle,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.outfit(
-                    color: _text, fontSize: 14, fontWeight: FontWeight.w800)),
+                    color: _text, fontSize: 14, fontWeight: FontWeight.w800,),),
             const SizedBox(height: 6),
             Text(
               EconomicVisionData.ctaBody,
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(
-                  color: _muted, fontSize: 12, height: 1.5),
+                  color: _muted, fontSize: 12, height: 1.5,),
             ),
             const SizedBox(height: 14),
             SizedBox(
@@ -645,11 +645,11 @@ class EconomicVisionScreen extends StatelessWidget {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),),
                 ),
                 child: Text(heroApp ? EconomicVisionData.ctaButtonHero : EconomicVisionData.ctaButton,
                     style: GoogleFonts.outfit(
-                        fontSize: 14, fontWeight: FontWeight.w800)),
+                        fontSize: 14, fontWeight: FontWeight.w800,),),
               ),
             ),
           ],
@@ -677,14 +677,14 @@ class EconomicVisionScreen extends StatelessWidget {
                     style: GoogleFonts.outfit(
                         color: _muted,
                         fontSize: 11,
-                        fontWeight: FontWeight.w700)),
+                        fontWeight: FontWeight.w700,),),
               ],
             ),
             const SizedBox(height: 6),
             Text(
               EconomicVisionData.sourceBody,
               style: GoogleFonts.outfit(
-                  color: _muted, fontSize: 10, height: 1.55),
+                  color: _muted, fontSize: 10, height: 1.55,),
             ),
           ],
         ),

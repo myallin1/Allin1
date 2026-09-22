@@ -394,13 +394,11 @@ class _CustomerUsageTrackingScreenState
               ],
             ),
           ),
-          loading
-              ? const SizedBox(
+          if (loading) const SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2, color: _gold),
-                )
-              : Text(
+                ) else Text(
                   '$value',
                   style: GoogleFonts.outfit(
                     color: _text,
@@ -554,7 +552,7 @@ class _PosterSignupsSheetState extends State<_PosterSignupsSheet> {
                           itemBuilder: (context, index) {
                             if (index == _users.length) {
                               return const Padding(
-                                padding: EdgeInsets.all(16.0),
+                                padding: EdgeInsets.all(16),
                                 child: Center(
                                   child: CircularProgressIndicator(
                                     color: _gold,
@@ -575,11 +573,11 @@ class _PosterSignupsSheetState extends State<_PosterSignupsSheet> {
                                 child: Icon(Icons.person, color: _gold),
                               ),
                               title: Text(name,
-                                  style: const TextStyle(color: _text)),
+                                  style: const TextStyle(color: _text),),
                               subtitle: Text('$email\n$phone',
                                   style: TextStyle(
                                       color: _text.withValues(alpha: 0.6),
-                                      fontSize: 12)),
+                                      fontSize: 12,),),
                             );
                           },
                         ),

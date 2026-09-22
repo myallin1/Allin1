@@ -44,9 +44,7 @@ List<Map<String, dynamic>> quickOrderItemsToJson(List<OrderLineItem> items) {
 
 class QuickOrderLineItemsForm extends StatefulWidget {
   const QuickOrderLineItemsForm({
-    super.key,
-    required this.items,
-    required this.onChanged,
+    required this.items, required this.onChanged, super.key,
     this.itemLabel = 'Item',
     this.qtyLabel = 'Qty',
   });
@@ -124,7 +122,6 @@ class _QuickOrderLineItemsFormState extends State<QuickOrderLineItemsForm> {
                 border: Border.all(color: colors.border),
               ),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Container(
                     width: 26,
@@ -165,7 +162,6 @@ class _QuickOrderLineItemsFormState extends State<QuickOrderLineItemsForm> {
                   ),
                   const SizedBox(width: 6),
                   Expanded(
-                    flex: 1,
                     child: TextField(
                       key: Key('quick_order_qty_$i'),
                       controller: _qtyCtrls[i],

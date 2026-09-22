@@ -16,12 +16,12 @@ import 'package:google_fonts/google_fonts.dart';
 import '../app_navigator.dart' show chittiRouteObserver;
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
 import '../services/auth_prompt_service.dart';
+import '../services/auth_service.dart';
 import '../services/chitti_memory_service.dart';
 import '../services/cloudinary_upload_service.dart';
 import '../services/grocery_ai_notes_service.dart';
 import '../services/service_request_service.dart';
 import '../widgets/location_capture_field.dart';
-import '../services/auth_service.dart';
 import '../widgets/quick_order_line_items.dart';
 import '../widgets/server_busy_dialog.dart';
 import 'dmart_screen.dart';
@@ -139,7 +139,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> with RouteAware
         // FIX (QA bug — dense single paragraph was hard to scan):
         // refactored into a clean 3-step numbered list, one action per
         // line, same information as before.
-        content: Column(
+        content: const Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -147,17 +147,17 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> with RouteAware
               "DMart doesn't officially deliver here, but you can still browse and order:",
               style: TextStyle(color: _kMuted, fontSize: 13.5, height: 1.4),
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             _DmartStep(
               number: '1',
               text: 'When DMart asks for your location, enter Pincode 641014 (Coimbatore) or 400001 (Mumbai).',
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             _DmartStep(
               number: '2',
               text: 'Add whatever you need to your DMart cart, then take screenshots of it.',
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             _DmartStep(
               number: '3',
               text: 'Come back and upload those screenshots in our Send Order section below.',
@@ -167,7 +167,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> with RouteAware
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text('Cancel', style: TextStyle(color: _kMuted)),
+            child: const Text('Cancel', style: TextStyle(color: _kMuted)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: _kGreen, padding: const EdgeInsets.symmetric(vertical: 12)),
@@ -177,7 +177,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> with RouteAware
         ],
       ),
     );
-    if (proceed == true && context.mounted) {
+    if ((proceed ?? false) && context.mounted) {
       await Navigator.push<void>(
         context,
         MaterialPageRoute<void>(builder: (_) => const DmartScreen()),
@@ -201,7 +201,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> with RouteAware
       });
       if (result.files.length > _maxImages && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Only the first $_maxImages images were added.')),
+          const SnackBar(content: Text('Only the first $_maxImages images were added.')),
         );
       }
     } catch (e) {
@@ -360,8 +360,6 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> with RouteAware
             const SizedBox(height: 8),
             QuickOrderLineItemsForm(
               items: _lineItems,
-              itemLabel: 'Item',
-              qtyLabel: 'Qty',
               onChanged: (items) => setState(() => _lineItems = items),
             ),
             const SizedBox(height: 16),
@@ -378,7 +376,7 @@ class _GroceryOrderScreenState extends State<GroceryOrderScreen> with RouteAware
             // coming back from the "Store Order" DMart WebView straight at
             // this uploader, since that's how their DMart cart actually
             // becomes a real order (see _openDmartWithPincodeNotice above).
-            Text('Upload your DMart cart screenshots here!', style: TextStyle(color: _kGreen, fontSize: 11.5, fontWeight: FontWeight.w600)),
+            const Text('Upload your DMart cart screenshots here!', style: TextStyle(color: _kGreen, fontSize: 11.5, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             GestureDetector(
               onTap: _pickedFiles.length >= _maxImages ? null : _pickImages,
@@ -587,7 +585,7 @@ class _DmartStep extends StatelessWidget {
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               text,
-              style: TextStyle(color: _kMuted, fontSize: 13.5, height: 1.4),
+              style: const TextStyle(color: _kMuted, fontSize: 13.5, height: 1.4),
             ),
           ),
         ),

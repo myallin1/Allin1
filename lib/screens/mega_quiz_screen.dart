@@ -350,6 +350,7 @@ class _MegaQuizScreenState extends State<MegaQuizScreen> {
         _isVerified = true;
         _aadhaarController.clear();
       });
+      // ignore: avoid_catching_errors
     } on StateError {
       if (!mounted) {
         return;

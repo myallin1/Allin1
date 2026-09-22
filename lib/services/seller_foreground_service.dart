@@ -40,14 +40,10 @@ class SellerForegroundService {
             channelName: 'Seller Monitoring Active',
             channelDescription:
                 'Keeps the Seller app watching for new orders in the background.',
-            channelImportance: NotificationChannelImportance.LOW,
-            priority: NotificationPriority.LOW,
           ),
           iosNotificationOptions: const IOSNotificationOptions(),
           foregroundTaskOptions: ForegroundTaskOptions(
             eventAction: ForegroundTaskEventAction.repeat(60000),
-            autoRunOnBoot: false,
-            allowWifiLock: false,
           ),
         );
         _initialized = true;

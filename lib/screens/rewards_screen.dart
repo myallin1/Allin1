@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/gift_coupon_model.dart';
 import '../services/db_usage_tracker.dart';
 import '../services/gift_coupon_service.dart';
+import '../services/hive_cache.dart';
 import '../widgets/banner_slider.dart';
 import '../widgets/gift_scratch_card.dart';
 import '../widgets/promo_overlay.dart';
@@ -85,11 +86,26 @@ class _RewardsScreenState extends State<RewardsScreen>
     super.dispose();
   }
 
-  Future<void> _loadRewardsState() async {
+  Future<void> _loadRewardsState({bool forceRefresh = false}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       if (mounted) setState(() => _loadingRewards = false);
       return;
+    }
+
+    final cacheKey = 'rewards_v2_${user.uid}';
+    if (!forceRefresh) {
+      final cached = await HiveCache.get<Map<dynamic, dynamic>>(cacheKey);
+      if (cached != null) {
+        if (!mounted) return;
+        setState(() {
+          _paytmQuizClaimed = cached['paytmQuizClaimed'] == true;
+          _paytmCouponCode = cached['paytmCouponCode'] as String?;
+          _aiQuizClaimed = cached['aiQuizClaimed'] == true;
+          _loadingRewards = false;
+        });
+        return;
+      }
     }
 
     try {
@@ -101,11 +117,21 @@ class _RewardsScreenState extends State<RewardsScreen>
       final data = snap.data() ?? <String, dynamic>{};
       final rewardsV2 = (data['rewardsV2'] as Map<String, dynamic>?) ?? {};
 
+      final paytmClaimed = rewardsV2['paytmQuizClaimed'] == true;
+      final paytmCode = rewardsV2['paytmCouponCode'] as String?;
+      final aiClaimed = rewardsV2['aiQuizClaimed'] == true;
+
+      unawaited(HiveCache.put(cacheKey, {
+        'paytmQuizClaimed': paytmClaimed,
+        'paytmCouponCode': paytmCode,
+        'aiQuizClaimed': aiClaimed,
+      }, ttl: const Duration(hours: 2)),);
+
       if (!mounted) return;
       setState(() {
-        _paytmQuizClaimed = rewardsV2['paytmQuizClaimed'] == true;
-        _paytmCouponCode = rewardsV2['paytmCouponCode'] as String?;
-        _aiQuizClaimed = rewardsV2['aiQuizClaimed'] == true;
+        _paytmQuizClaimed = paytmClaimed;
+        _paytmCouponCode = paytmCode;
+        _aiQuizClaimed = aiClaimed;
         _loadingRewards = false;
       });
     } catch (e) {
@@ -121,7 +147,7 @@ class _RewardsScreenState extends State<RewardsScreen>
       barrierColor: Colors.black.withValues(alpha: 0.62),
       builder: (context) => const _PaytmQuizDialog(),
     );
-    await _loadRewardsState();
+    await _loadRewardsState(forceRefresh: true);
   }
 
   Future<void> _openAiQuizDialog() async {
@@ -131,7 +157,7 @@ class _RewardsScreenState extends State<RewardsScreen>
       barrierColor: Colors.black.withValues(alpha: 0.62),
       builder: (context) => const _AiQuizDialog(),
     );
-    await _loadRewardsState();
+    await _loadRewardsState(forceRefresh: true);
   }
 
   @override

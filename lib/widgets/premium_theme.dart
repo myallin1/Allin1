@@ -156,7 +156,7 @@ List<BoxShadow> glowShadow(Color color, {double strength = 1}) => [
 // There were eight call sites; all eight are updated in this same pass.
 
 TextStyle premiumTitle(BuildContext context,
-        {double size = 15, Color? color}) =>
+        {double size = 15, Color? color,}) =>
     GoogleFonts.outfit(
       color: color ?? context.premium.ink,
       fontSize: size,
@@ -176,7 +176,7 @@ TextStyle premiumBody(BuildContext context, {double size = 12, Color? color}) =>
 /// Prices stay the brand accent in every theme — a price is a call to
 /// action, not body copy.
 TextStyle premiumPrice(BuildContext context,
-        {double size = 17, Color? color}) =>
+        {double size = 17, Color? color,}) =>
     GoogleFonts.outfit(
       color: color ?? Theme.of(context).colorScheme.primary,
       fontSize: size,
@@ -288,7 +288,7 @@ class VideoGlowBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.play_arrow_rounded,
-              color: Colors.white, size: compact ? 12 : 16),
+              color: Colors.white, size: compact ? 12 : 16,),
           SizedBox(width: compact ? 2 : 5),
           Text(
             label,
@@ -353,7 +353,7 @@ class PremiumModalScrim extends StatelessWidget {
   Widget build(BuildContext context) {
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-      child: Container(
+      child: ColoredBox(
         color: Colors.black.withValues(alpha: 0.45),
         child: child,
       ),

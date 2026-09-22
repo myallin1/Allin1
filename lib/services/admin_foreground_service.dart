@@ -61,14 +61,10 @@ class AdminForegroundService {
                 'Keeps the Admin app watching for new rides and service '
                 'requests in the background so alerts still arrive with '
                 'the app closed.',
-            channelImportance: NotificationChannelImportance.LOW,
-            priority: NotificationPriority.LOW,
           ),
           iosNotificationOptions: const IOSNotificationOptions(),
           foregroundTaskOptions: ForegroundTaskOptions(
             eventAction: ForegroundTaskEventAction.repeat(60000),
-            autoRunOnBoot: false,
-            allowWifiLock: false,
           ),
         );
         _initialized = true;

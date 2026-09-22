@@ -157,7 +157,7 @@ class ChittiCmPitch {
           'thousand crore and one lakh crore rupees would stay here — in '
           'the hands of our own traders, delivery partners and people — '
           'instead of leaving the state. It works like an economic dam '
-          'holding Tamil Nadu\'s wealth inside Tamil Nadu, sir.',
+          "holding Tamil Nadu's wealth inside Tamil Nadu, sir.",
     ),
     PitchStage(
       id: 'ask',

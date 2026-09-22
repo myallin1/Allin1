@@ -135,9 +135,9 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
         .map((e) => Map<String, dynamic>.from(e as Map))
         .map((m) => _ScreenUsageEntry(
               screenKey: m['screenKey'] as String? ?? '',
-              actions: (Map<String, dynamic>.from(m['actions'] as Map? ?? const {}))
+              actions: Map<String, dynamic>.from(m['actions'] as Map? ?? const {})
                   .map((k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0)),
-            ))
+            ),)
         .toList();
   }
 
@@ -150,7 +150,7 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
                   'app': r.app,
                   'reads': r.reads,
                   'writes': r.writes,
-                })
+                },)
             .toList(),
         'totalReads': _totalReads,
         'totalWrites': _totalWrites,
@@ -612,7 +612,7 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
 
   Widget _quotaBar(String label, int used, int limit) {
     final fraction = limit == 0 ? 0.0 : (used / limit).clamp(0.0, 1.0);
-    final pct = (fraction * 100);
+    final pct = fraction * 100;
     // Green under half, amber approaching, red once genuinely at risk —
     // on Spark, hitting the ceiling means the app STOPS SERVING until the
     // midnight-Pacific reset, so 80% deserves real visual urgency.
@@ -628,7 +628,7 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
             Text(
               label,
               style: GoogleFonts.outfit(
-                  color: _text, fontSize: 12, fontWeight: FontWeight.w700),
+                  color: _text, fontSize: 12, fontWeight: FontWeight.w700,),
             ),
             Text(
               '$used / $limit  (${pct.toStringAsFixed(1)}%)',
@@ -738,14 +738,14 @@ class _AdminDbUsageScreenState extends State<AdminDbUsageScreen> {
                                 Text(
                                   '${a.value}',
                                   style: GoogleFonts.outfit(
-                                      color: _pinkLight, fontSize: 11.5, fontWeight: FontWeight.w700),
+                                      color: _pinkLight, fontSize: 11.5, fontWeight: FontWeight.w700,),
                                 ),
                               ],
                             ),
-                          ))
+                          ),)
                       .toList(),
                 ),
-              )),
+              ),),
         ],
       ),
     );

@@ -14,8 +14,6 @@
 // on erode_offers_management_screen.dart (same Cloudinary upload
 // pattern, same VideoLinkField widget) so this screen behaves exactly
 // like the one Nizam already knows.
-import 'dart:typed_data';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -24,8 +22,8 @@ import 'package:image/image.dart' as img;
 
 import '../../models/mobile_models.dart' show isValidYoutubeUrl;
 import '../../services/cloudinary_upload_service.dart';
-import '../../widgets/video_link_field.dart';
 import '../../services/firestore_usage_tracking.dart';
+import '../../widgets/video_link_field.dart';
 
 const Color _bg = Color(0xFF0F0B14);
 const Color _surface = Color(0xFF1B1524);
@@ -47,13 +45,13 @@ class AdminHomeBannerScreen extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: _text),
         title: const Text('Home Page Banner Offers',
-            style: TextStyle(color: _text, fontWeight: FontWeight.w800)),
+            style: TextStyle(color: _text, fontWeight: FontWeight.w800),),
         actions: [
           TextButton.icon(
             onPressed: () => _publish(context),
             icon: const Icon(Icons.publish_rounded, color: _pink, size: 20),
             label: const Text('Publish',
-                style: TextStyle(color: _pink, fontWeight: FontWeight.w800)),
+                style: TextStyle(color: _pink, fontWeight: FontWeight.w800),),
           ),
         ],
       ),
@@ -75,7 +73,7 @@ class AdminHomeBannerScreen extends StatelessWidget {
           if (docs.isEmpty) {
             return const Center(
               child: Text('No banner offers yet. Tap + to add one.',
-                  style: TextStyle(color: Colors.white54)),
+                  style: TextStyle(color: Colors.white54),),
             );
           }
           return ListView.builder(
@@ -101,7 +99,7 @@ class AdminHomeBannerScreen extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: _surface,
         title: const Text('Publish banner offers to customers?',
-            style: TextStyle(color: _text, fontWeight: FontWeight.w800)),
+            style: TextStyle(color: _text, fontWeight: FontWeight.w800),),
         content: const Text(
           'Every customer will see the current banner offers — including '
           'any you removed — the next time their app checks, or straight '
@@ -200,14 +198,14 @@ class _BannerAdminCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(shopName.isEmpty ? '(no name)' : shopName,
-                    style: const TextStyle(color: _text, fontWeight: FontWeight.w800, fontSize: 15)),
+                    style: const TextStyle(color: _text, fontWeight: FontWeight.w800, fontSize: 15),),
                 if (hasVideo) ...[
                   const SizedBox(height: 3),
                   const Row(children: [
                     Icon(Icons.play_circle_fill_rounded, size: 12, color: _pink),
                     SizedBox(width: 4),
                     Text('Has video', style: TextStyle(color: _pink, fontSize: 10.5)),
-                  ]),
+                  ],),
                 ],
               ],
             ),
@@ -392,7 +390,7 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
     return AlertDialog(
       backgroundColor: _surface,
       title: Text(widget.offerId != null ? 'Edit Banner Offer' : 'Add Banner Offer',
-          style: const TextStyle(color: _text)),
+          style: const TextStyle(color: _text),),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -413,7 +411,6 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
               textColor: _text,
               mutedColor: Colors.white54,
               borderColor: Colors.white24,
-              accentColor: _pink,
             ),
           ],
         ),
@@ -449,9 +446,9 @@ class _BannerFormDialogState extends State<_BannerFormDialog> {
         ),
         alignment: Alignment.center,
         child: (_pickedImageBytes == null && (_imageUrl == null || _imageUrl!.isEmpty))
-            ? Column(
+            ? const Column(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   Icon(Icons.add_photo_alternate_rounded, color: Colors.white54, size: 28),
                   SizedBox(height: 6),
                   Text('Add banner image (any size/shape)', style: TextStyle(color: Colors.white54, fontSize: 12)),

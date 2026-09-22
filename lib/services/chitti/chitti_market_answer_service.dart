@@ -33,6 +33,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../mobile_catalog_service.dart';
+import '../whatsapp/mobile_market_intelligence_service.dart';
 import 'chitti_web_search_service.dart';
 
 /// One quality option for a repair.
@@ -156,17 +157,30 @@ class ChittiMarketAnswerService {
 
     var reference = '';
     var sources = <String>[];
+
+    // 1. Check local dealer group intelligence first
     try {
-      final results = await lookup(_searchQueryFor(question, model));
-      reference = _firstPrice(results);
-      sources = results
-          .map((r) => r.source)
-          .where((s) => s.isNotEmpty)
-          .toSet()
-          .take(3)
-          .toList(growable: false);
-    } catch (e) {
-      debugPrint('[ChittiMarketAnswer] lookup failed: $e');
+      final summary = await MobileMarketIntelligenceService.getMarketSummary(model.isNotEmpty ? model : question);
+      if (summary != null && summary.totalDeals > 0) {
+        reference = '₹${summary.averagePrice.toInt()}';
+        sources = ['WhatsApp Dealer Market (${summary.totalDeals} listings)'];
+      }
+    } catch (_) {}
+
+    // 2. Fallback to live web search if no dealer post exists
+    if (reference.isEmpty) {
+      try {
+        final results = await lookup(_searchQueryFor(question, model));
+        reference = _firstPrice(results);
+        sources = results
+            .map((r) => r.source)
+            .where((s) => s.isNotEmpty)
+            .toSet()
+            .take(3)
+            .toList(growable: false);
+      } catch (e) {
+        debugPrint('[ChittiMarketAnswer] lookup failed: $e');
+      }
     }
 
     final base = _parseAmount(reference);

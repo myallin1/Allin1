@@ -78,7 +78,7 @@ class _AdminSellerPayoutsScreenState extends State<AdminSellerPayoutsScreen> {
       };
     }).toList()
       ..sort((a, b) => (b['pendingPayouts'] as double)
-          .compareTo(a['pendingPayouts'] as double));
+          .compareTo(a['pendingPayouts'] as double),);
   }
 
   /// Records that [amount] has been paid to this seller offline —
@@ -115,13 +115,13 @@ class _AdminSellerPayoutsScreenState extends State<AdminSellerPayoutsScreen> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _card,
         title: Text('Settle ${seller['name']}',
-            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700)),
+            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700),),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Owed: ₹${owed.toStringAsFixed(2)}',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 12)),
+                style: GoogleFonts.outfit(color: _muted, fontSize: 12),),
             const SizedBox(height: 10),
             TextField(
               controller: controller,
@@ -211,12 +211,12 @@ class _AdminSellerPayoutsScreenState extends State<AdminSellerPayoutsScreen> {
               .where((s) => (s['pendingPayouts'] as double) > 0)
               .toList()
             ..sort((a, b) => (b['pendingPayouts'] as double)
-                .compareTo(a['pendingPayouts'] as double));
+                .compareTo(a['pendingPayouts'] as double),);
 
           if (docs.isEmpty) {
             return Center(
               child: Text('No sellers currently owed a payout.',
-                  style: GoogleFonts.outfit(color: _muted)),
+                  style: GoogleFonts.outfit(color: _muted),),
             );
           }
 
@@ -239,10 +239,10 @@ class _AdminSellerPayoutsScreenState extends State<AdminSellerPayoutsScreen> {
                   children: [
                     Text('${docs.length} sellers owed',
                         style: GoogleFonts.outfit(
-                            color: _muted, fontWeight: FontWeight.w600)),
+                            color: _muted, fontWeight: FontWeight.w600,),),
                     Text('₹${totalOwed.toStringAsFixed(2)}',
                         style: GoogleFonts.outfit(
-                            color: _gold, fontWeight: FontWeight.w900, fontSize: 20)),
+                            color: _gold, fontWeight: FontWeight.w900, fontSize: 20,),),
                   ],
                 ),
               ),
@@ -267,7 +267,7 @@ class _AdminSellerPayoutsScreenState extends State<AdminSellerPayoutsScreen> {
                               children: [
                                 Text(seller['name'] as String,
                                     style: GoogleFonts.outfit(
-                                        color: _text, fontWeight: FontWeight.w700)),
+                                        color: _text, fontWeight: FontWeight.w700,),),
                                 const SizedBox(height: 4),
                                 Text(
                                   '${seller['city']} • Settled so far: ₹${(seller['totalSettled'] as double).toStringAsFixed(2)}',
@@ -279,7 +279,7 @@ class _AdminSellerPayoutsScreenState extends State<AdminSellerPayoutsScreen> {
                           Text(
                             '₹${(seller['pendingPayouts'] as double).toStringAsFixed(2)}',
                             style: GoogleFonts.outfit(
-                                color: _gold, fontWeight: FontWeight.w800),
+                                color: _gold, fontWeight: FontWeight.w800,),
                           ),
                           const SizedBox(width: 10),
                           ElevatedButton(
@@ -288,7 +288,7 @@ class _AdminSellerPayoutsScreenState extends State<AdminSellerPayoutsScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 12),
                             ),
                             onPressed: () => _confirmAndSettle(
-                                context, seller, externalData, docs),
+                                context, seller, externalData, docs,),
                             child: const Text('Settle'),
                           ),
                         ],

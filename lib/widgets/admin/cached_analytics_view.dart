@@ -278,7 +278,7 @@ class _CachedAnalyticsViewState<T> extends State<CachedAnalyticsView<T>> {
               widget.emptyMessage,
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(
-                  color: _text, fontWeight: FontWeight.w700, fontSize: 15),
+                  color: _text, fontWeight: FontWeight.w700, fontSize: 15,),
             ),
             const SizedBox(height: 8),
             Text(

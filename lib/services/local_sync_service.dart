@@ -50,6 +50,39 @@ const Duration _kMaxSyncAge = Duration(hours: 24);
 // Sync cooldown: minimum gap between syncs (30 minutes)
 const Duration _kSyncCooldown = Duration(minutes: 30);
 
+// ── Result types ──────────────────────────────────────────────────────────────
+
+class BoxSyncResult {
+  final int recordsSynced;
+  final List<String> errors;
+  const BoxSyncResult({required this.recordsSynced, this.errors = const []});
+}
+
+/// Public result returned by syncAll()
+class SyncResult {
+  final int storesSynced;
+  final int rewardsSynced;
+  final bool balanceUpdated;
+  final List<String> errors;
+
+  const SyncResult({
+    required this.storesSynced,
+    required this.rewardsSynced,
+    required this.balanceUpdated,
+    required this.errors,
+  });
+
+  bool get hasErrors => errors.isNotEmpty;
+  bool get isFullSuccess => !hasErrors;
+
+  @override
+  String toString() => 'SyncResult('
+      'stores: $storesSynced, '
+      'rewards: $rewardsSynced, '
+      'balance: $balanceUpdated, '
+      'errors: $errors)';
+}
+
 class LocalSyncService {
   LocalSyncService._();
   static final LocalSyncService instance = LocalSyncService._();
@@ -129,12 +162,12 @@ class LocalSyncService {
   // ── Store Sync ────────────────────────────────────────────────────────────
   /// Delta-fetches stores for a city from TrailBase.
   /// Returns stores from cache immediately if within cooldown window.
-  Future<_BoxSyncResult> syncStores(String city) async {
+  Future<BoxSyncResult> syncStores(String city) async {
     _assertInitialized();
 
     if (_kTrailBaseUrl.isEmpty) {
       debugPrint('[LocalSync] TrailBase URL not configured — skipping store sync.');
-      return const _BoxSyncResult(recordsSynced: 0);
+      return const BoxSyncResult(recordsSynced: 0);
     }
 
     final lastSync = _getLastSync(_kStoresSyncKey);
@@ -142,7 +175,7 @@ class LocalSyncService {
     // Respect cooldown — don't hammer the server
     if (lastSync != null && _withinCooldown(lastSync)) {
       debugPrint('[LocalSync] Stores within cooldown, using cache.');
-      return const _BoxSyncResult(recordsSynced: 0);
+      return const BoxSyncResult(recordsSynced: 0);
     }
 
     try {
@@ -153,7 +186,7 @@ class LocalSyncService {
 
       final records = await _deltaFetch(endpoint);
       if (records == null) {
-        return const _BoxSyncResult(recordsSynced: 0);
+        return const BoxSyncResult(recordsSynced: 0);
       }
 
       int synced = 0;
@@ -169,27 +202,27 @@ class LocalSyncService {
 
       await _setLastSync(_kStoresSyncKey);
       debugPrint('[LocalSync] Stores synced: $synced records for $city');
-      return _BoxSyncResult(recordsSynced: synced);
+      return BoxSyncResult(recordsSynced: synced);
     } catch (e) {
       debugPrint('[LocalSync] Store sync failed: $e');
-      return _BoxSyncResult(recordsSynced: 0, errors: ['Store sync: $e']);
+      return BoxSyncResult(recordsSynced: 0, errors: ['Store sync: $e']);
     }
   }
 
   // ── Rewards Sync ──────────────────────────────────────────────────────────
   /// Delta-fetches reward tasks (global + user-specific) from TrailBase.
-  Future<_BoxSyncResult> syncRewards(String userId) async {
+  Future<BoxSyncResult> syncRewards(String userId) async {
     _assertInitialized();
 
     if (_kTrailBaseUrl.isEmpty) {
       debugPrint('[LocalSync] TrailBase URL not configured — skipping reward sync.');
-      return const _BoxSyncResult(recordsSynced: 0);
+      return const BoxSyncResult(recordsSynced: 0);
     }
 
     final lastSync = _getLastSync(_kRewardsSyncKey);
     if (lastSync != null && _withinCooldown(lastSync)) {
       debugPrint('[LocalSync] Rewards within cooldown, using cache.');
-      return const _BoxSyncResult(recordsSynced: 0);
+      return const BoxSyncResult(recordsSynced: 0);
     }
 
     try {
@@ -200,7 +233,7 @@ class LocalSyncService {
 
       final records = await _deltaFetch(endpoint);
       if (records == null) {
-        return const _BoxSyncResult(recordsSynced: 0);
+        return const BoxSyncResult(recordsSynced: 0);
       }
 
       int synced = 0;
@@ -216,27 +249,27 @@ class LocalSyncService {
 
       await _setLastSync(_kRewardsSyncKey);
       debugPrint('[LocalSync] Rewards synced: $synced records');
-      return _BoxSyncResult(recordsSynced: synced);
+      return BoxSyncResult(recordsSynced: synced);
     } catch (e) {
       debugPrint('[LocalSync] Reward sync failed: $e');
-      return _BoxSyncResult(recordsSynced: 0, errors: ['Reward sync: $e']);
+      return BoxSyncResult(recordsSynced: 0, errors: ['Reward sync: $e']);
     }
   }
 
   // ── User Balance Sync ─────────────────────────────────────────────────────
   /// Fetches the user's latest coin balance snapshot from TrailBase.
-  Future<_BoxSyncResult> syncUserBalance(String userId) async {
+  Future<BoxSyncResult> syncUserBalance(String userId) async {
     _assertInitialized();
 
     if (_kTrailBaseUrl.isEmpty) {
       debugPrint('[LocalSync] TrailBase URL not configured — skipping balance sync.');
-      return const _BoxSyncResult(recordsSynced: 0);
+      return const BoxSyncResult(recordsSynced: 0);
     }
 
     final lastSync = _getLastSync('${_kBalanceSyncKey}_$userId');
     if (lastSync != null && _withinCooldown(lastSync)) {
       debugPrint('[LocalSync] Balance within cooldown, using cache.');
-      return const _BoxSyncResult(recordsSynced: 0);
+      return const BoxSyncResult(recordsSynced: 0);
     }
 
     try {
@@ -253,21 +286,21 @@ class LocalSyncService {
         await _balanceBox.put(userId, balance);
         await _setLastSync('${_kBalanceSyncKey}_$userId');
         debugPrint('[LocalSync] Balance synced for $userId');
-        return const _BoxSyncResult(recordsSynced: 1);
+        return const BoxSyncResult(recordsSynced: 1);
       } else if (response.statusCode == 404) {
         // User not in TrailBase yet — seed with empty balance
         final empty = UserBalanceModel.empty(userId);
         await _balanceBox.put(userId, empty);
-        return const _BoxSyncResult(recordsSynced: 1);
+        return const BoxSyncResult(recordsSynced: 1);
       } else {
-        return _BoxSyncResult(
+        return BoxSyncResult(
           recordsSynced: 0,
           errors: ['Balance HTTP ${response.statusCode}'],
         );
       }
     } catch (e) {
       debugPrint('[LocalSync] Balance sync failed: $e');
-      return _BoxSyncResult(recordsSynced: 0, errors: ['Balance sync: $e']);
+      return BoxSyncResult(recordsSynced: 0, errors: ['Balance sync: $e']);
     }
   }
 
@@ -422,37 +455,4 @@ class LocalSyncService {
       );
     }
   }
-}
-
-// ── Result types ──────────────────────────────────────────────────────────────
-
-class _BoxSyncResult {
-  final int recordsSynced;
-  final List<String> errors;
-  const _BoxSyncResult({required this.recordsSynced, this.errors = const []});
-}
-
-/// Public result returned by syncAll()
-class SyncResult {
-  final int storesSynced;
-  final int rewardsSynced;
-  final bool balanceUpdated;
-  final List<String> errors;
-
-  const SyncResult({
-    required this.storesSynced,
-    required this.rewardsSynced,
-    required this.balanceUpdated,
-    required this.errors,
-  });
-
-  bool get hasErrors => errors.isNotEmpty;
-  bool get isFullSuccess => !hasErrors;
-
-  @override
-  String toString() => 'SyncResult('
-      'stores: $storesSynced, '
-      'rewards: $rewardsSynced, '
-      'balance: $balanceUpdated, '
-      'errors: $errors)';
 }

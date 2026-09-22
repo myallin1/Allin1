@@ -116,12 +116,7 @@ class _HubTile extends StatelessWidget {
   final String? imageAsset;
 
   const _HubTile({
-    super.key,
-    required this.label,
-    required this.subtitle,
-    required this.icon,
-    required this.gradient,
-    required this.onTap,
+    required this.label, required this.subtitle, required this.icon, required this.gradient, required this.onTap, super.key,
     this.imageAsset,
   });
 

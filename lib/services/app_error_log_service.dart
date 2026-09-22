@@ -5,13 +5,17 @@
 // recurring cloud costs. Capped at 500 entries (oldest pruned) and
 // deduplicated within a 5-minute window for identical errors on the
 // same screen.
+import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../config/app_variant.dart';
 import 'chitti_memory_service.dart';
 
 class AppErrorLogEntry {
@@ -29,6 +33,10 @@ class AppErrorLogEntry {
     this.authUid,
     this.authEmail,
     this.hasAdminClaim,
+    this.appVariant = 'customer',
+    this.category = 'crash',
+    this.resolved = false,
+    this.osPlatform,
   });
 
   final String id;
@@ -41,9 +49,13 @@ class AppErrorLogEntry {
   final String appVersion;
   int repeatCount;
   String lastSeenAt;
-  final String? authUid;
-  final String? authEmail;
-  final bool? hasAdminClaim;
+  String? authUid;
+  String? authEmail;
+  bool? hasAdminClaim;
+  final String appVariant; // customer, hero, seller, admin
+  final String category; // crash, network, permission, ui, payment, location
+  bool resolved;
+  final String? osPlatform;
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -59,6 +71,10 @@ class AppErrorLogEntry {
         'authUid': authUid,
         'authEmail': authEmail,
         'hasAdminClaim': hasAdminClaim,
+        'appVariant': appVariant,
+        'category': category,
+        'resolved': resolved,
+        'osPlatform': osPlatform,
       };
 
   factory AppErrorLogEntry.fromMap(Map<dynamic, dynamic> map) =>
@@ -77,6 +93,10 @@ class AppErrorLogEntry {
         authUid: map['authUid'] as String?,
         authEmail: map['authEmail'] as String?,
         hasAdminClaim: map['hasAdminClaim'] as bool?,
+        appVariant: map['appVariant'] as String? ?? 'customer',
+        category: map['category'] as String? ?? 'crash',
+        resolved: map['resolved'] as bool? ?? false,
+        osPlatform: map['osPlatform'] as String?,
       );
 }
 
@@ -88,7 +108,66 @@ class AppErrorLogService {
   static const Duration dedupWindow = Duration(minutes: 5);
   static const int maxStackTraceChars = 2000;
 
+  static final Map<String, DateTime> _lastRemoteSyncedAt = {};
+  static const Duration remoteSyncThrottle = Duration(minutes: 15);
+
   static String? _cachedVersion;
+
+  static String _resolvePlatform() {
+    if (kIsWeb) return 'web';
+    try {
+      return Platform.operatingSystem;
+    } catch (_) {
+      return 'unknown';
+    }
+  }
+
+  static String inferCategory({
+    required String message,
+    String? stack,
+    String severity = 'ERROR',
+  }) {
+    final combined = '${message.toLowerCase()} ${(stack ?? '').toLowerCase()}';
+    if (combined.contains('socketexception') ||
+        combined.contains('timeoutexception') ||
+        combined.contains('connection refused') ||
+        combined.contains('clientexception') ||
+        combined.contains('network is unreachable') ||
+        combined.contains('failed host lookup') ||
+        combined.contains('http')) {
+      return 'network';
+    }
+    if (combined.contains('location') ||
+        combined.contains('geolocator') ||
+        combined.contains('gps') ||
+        combined.contains('latlong')) {
+      return 'location';
+    }
+    if (combined.contains('payment') ||
+        combined.contains('phonepe') ||
+        combined.contains('upi') ||
+        combined.contains('transaction') ||
+        combined.contains('wallet')) {
+      return 'payment';
+    }
+    if (combined.contains('permission-denied') ||
+        combined.contains('permission_denied') ||
+        combined.contains('permission denied') ||
+        combined.contains('unauthorized') ||
+        combined.contains('accessdenied')) {
+      return 'permission';
+    }
+    if (combined.contains('renderflex') ||
+        combined.contains('overflowed') ||
+        combined.contains('boxconstraints') ||
+        combined.contains('viewport') ||
+        combined.contains('layout') ||
+        combined.contains('renderbox') ||
+        combined.contains('setstate()')) {
+      return 'ui';
+    }
+    return 'crash';
+  }
 
   static Future<String> _getAppVersion() async {
     if (_cachedVersion != null) return _cachedVersion!;
@@ -112,7 +191,11 @@ class AppErrorLogService {
   }
 
   /// Hook for Flutter framework errors (rendering, layout, widget lifecycle).
-  static void recordFlutterError(FlutterErrorDetails details) {
+  static void recordFlutterError(
+    FlutterErrorDetails details, {
+    String? appVariant,
+    String? category,
+  }) {
     final isWarning = details.silent;
     final severity = isWarning ? 'WARNING' : 'ERROR';
     final message = details.exceptionAsString();
@@ -123,16 +206,53 @@ class AppErrorLogService {
       message: message,
       stack: stack,
       severity: severity,
+      appVariant: appVariant,
+      category: category,
     );
   }
 
   /// Hook for unhandled asynchronous errors from Dart / PlatformDispatcher.
-  static void recordPlatformError(Object error, StackTrace stack) {
+  static void recordPlatformError(
+    Object error,
+    StackTrace stack, {
+    String? appVariant,
+    String? category,
+  }) {
     logError(
       message: error.toString(),
       stack: stack.toString(),
       severity: 'CRITICAL',
+      appVariant: appVariant,
+      category: category,
     );
+  }
+
+  static void _maybeSyncToFirestore(AppErrorLogEntry entry) {
+    try {
+      final sig =
+          '${entry.appVariant}_${entry.screen}_${entry.errorMessage.hashCode}';
+      final now = DateTime.now();
+      final last = _lastRemoteSyncedAt[sig];
+      if (last != null && now.difference(last) < remoteSyncThrottle) {
+        return;
+      }
+      _lastRemoteSyncedAt[sig] = now;
+
+      unawaited(
+        Future<void>(() async {
+          try {
+            final col =
+                FirebaseFirestore.instance.collection('app_error_reports');
+            await col.doc(entry.id).set({
+              ...entry.toMap(),
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true),);
+          } catch (e) {
+            debugPrint('[AppErrorLogService] Firestore sync skipped: $e');
+          }
+        }),
+      );
+    } catch (_) {}
   }
 
   /// Logs an error into the local Hive store with automatic deduplication
@@ -145,6 +265,8 @@ class AppErrorLogService {
     String? authUid,
     String? authEmail,
     bool? hasAdminClaim,
+    String? appVariant,
+    String? category,
   }) async {
     try {
       final box = await _openBox();
@@ -179,6 +301,14 @@ class AppErrorLogService {
         } catch (_) {}
       }
 
+      final resolvedVariant = appVariant ?? currentAppVariant;
+      final resolvedCategory = category ??
+          inferCategory(
+            message: cleanMessage,
+            stack: cleanStack,
+            severity: severity,
+          );
+
       // Deduplication check within dedupWindow:
       // Scan recent entries to see if the same error occurred on the same screen.
       dynamic matchingKey;
@@ -204,7 +334,13 @@ class AppErrorLogService {
         // Increment repeat count and touch lastSeenAt
         existingMatch.repeatCount += 1;
         existingMatch.lastSeenAt = now.toIso8601String();
+        if (existingMatch.authUid == null && resolvedUid != null) {
+          existingMatch.authUid = resolvedUid;
+          existingMatch.authEmail = resolvedEmail;
+          existingMatch.hasAdminClaim = resolvedAdminClaim;
+        }
         await box.put(matchingKey, existingMatch.toMap());
+        _maybeSyncToFirestore(existingMatch);
         return existingMatch;
       }
 
@@ -228,9 +364,13 @@ class AppErrorLogService {
         authUid: resolvedUid,
         authEmail: resolvedEmail,
         hasAdminClaim: resolvedAdminClaim,
+        appVariant: resolvedVariant,
+        category: resolvedCategory,
+        osPlatform: _resolvePlatform(),
       );
 
       await box.put(id, newEntry.toMap());
+      _maybeSyncToFirestore(newEntry);
       return newEntry;
     } catch (e) {
       debugPrint('[AppErrorLogService] Failed to record error log: $e');
@@ -368,6 +508,78 @@ class AppErrorLogService {
       screenCounts: screenMap,
       topErrors: logs.take(5).toList(),
     );
+  }
+
+  /// Fetches remote cross-app errors from Firestore with local filtering
+  /// to prevent missing-index errors on Firebase Spark tier.
+  static Future<List<AppErrorLogEntry>> fetchRemoteErrors({
+    String? appVariant,
+    String? category,
+    bool? resolved,
+    int limit = 100,
+  }) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('app_error_reports')
+          .limit(limit)
+          .get();
+
+      var list = snapshot.docs
+          .map((d) => AppErrorLogEntry.fromMap(d.data()))
+          .toList();
+
+      if (appVariant != null && appVariant.isNotEmpty && appVariant != 'all') {
+        list = list
+            .where(
+              (e) => e.appVariant.toLowerCase() == appVariant.toLowerCase(),
+            )
+            .toList();
+      }
+      if (category != null && category.isNotEmpty && category != 'all') {
+        list = list
+            .where((e) => e.category.toLowerCase() == category.toLowerCase())
+            .toList();
+      }
+      if (resolved != null) {
+        list = list.where((e) => e.resolved == resolved).toList();
+      }
+
+      list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return list;
+    } catch (e) {
+      debugPrint('[AppErrorLogService] fetchRemoteErrors error: $e');
+      return <AppErrorLogEntry>[];
+    }
+  }
+
+  /// Marks an error report as resolved or active in Firestore.
+  static Future<void> markRemoteResolved(
+    String errorId, {
+    required bool resolved,
+  }) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('app_error_reports')
+          .doc(errorId)
+          .update({
+        'resolved': resolved,
+        'resolvedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('[AppErrorLogService] markRemoteResolved error: $e');
+    }
+  }
+
+  /// Deletes an error report doc from Firestore.
+  static Future<void> deleteRemoteError(String errorId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('app_error_reports')
+          .doc(errorId)
+          .delete();
+    } catch (e) {
+      debugPrint('[AppErrorLogService] deleteRemoteError error: $e');
+    }
   }
 
   static String _truncate(String? text, int max) {

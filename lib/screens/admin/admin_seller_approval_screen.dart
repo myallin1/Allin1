@@ -11,12 +11,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import '../../services/chitti/chitti_voice_service.dart';
 
 import '../../config/city_config.dart';
+import '../../services/chitti/chitti_voice_service.dart';
 import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
@@ -212,6 +212,29 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
               _detailRow('Category', category),
               _detailRow('Sub-category', subCategory),
               if (hotelType.trim().isNotEmpty) _detailRow('Shop Type', hotelType),
+              _detailRow(
+                'Partner Type',
+                data['partnerType'] == 'external'
+                    ? '🤝 External Shop Partner'
+                    : '🏠 Organic Self-Registered',
+              ),
+              if (data['partnerType'] == 'external') ...[
+                _detailRow(
+                  'Commission',
+                  '${((data['commissionPct'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(1)}%',
+                ),
+                _detailRow(
+                  'Delivery Radius',
+                  '${((data['deliveryRadiusKm'] as num?)?.toDouble() ?? 10.0).toStringAsFixed(0)} km',
+                ),
+                if (data['partnerAgreementAcceptedAt'] != null)
+                  _detailRow(
+                    'Agreement Date',
+                    (data['partnerAgreementAcceptedAt'] as String)
+                        .split('T')
+                        .first,
+                  ),
+              ],
               if (lat != null && lng != null)
                 _detailRow('GPS', '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}'),
               _detailRow(
@@ -346,8 +369,8 @@ class _AdminSellerApprovalScreenState extends State<AdminSellerApprovalScreen> {
         if (phone.isNotEmpty) {
           final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
           final formattedPhone = cleanPhone.startsWith('91') ? cleanPhone : '91$cleanPhone';
-          final welcomeMsg = "Vanakkam $name! Allin1 app-il ungal store profile approve seyyapattathu. Welcome aboard! - NJ Tech Team.";
-          final url = Uri.parse("https://wa.me/$formattedPhone?text=${Uri.encodeComponent(welcomeMsg)}");
+          final welcomeMsg = 'Vanakkam $name! Allin1 app-il ungal store profile approve seyyapattathu. Welcome aboard! - NJ Tech Team.';
+          final url = Uri.parse('https://wa.me/$formattedPhone?text=${Uri.encodeComponent(welcomeMsg)}');
           if (await canLaunchUrl(url)) {
             await launchUrl(url, mode: LaunchMode.externalApplication);
           }
@@ -643,6 +666,21 @@ class _SellerApprovalCard extends StatelessWidget {
               const Icon(Icons.location_city, size: 14, color: _gold),
               const SizedBox(width: 4),
               Text(city, style: const TextStyle(fontSize: 11, color: _gold, fontWeight: FontWeight.w700)),
+              if (data['partnerType'] == 'external') ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _green.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _green.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    '🤝 Partner (${((data['commissionPct'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(0)}%)',
+                    style: const TextStyle(fontSize: 10, color: _green, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 14),

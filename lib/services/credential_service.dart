@@ -14,10 +14,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/credential.dart' hide Timestamp;
 import '../models/credential_category.dart' hide Timestamp;
+import './firestore_usage_tracking.dart';
 import 'credential_cache_service.dart';
 import 'encryption_service.dart';
 import 'session_service.dart';
-import './firestore_usage_tracking.dart';
 
 // ================================================================
 // Credential Result Class

@@ -81,7 +81,7 @@ class _VideoSplashScreenState extends State<VideoSplashScreen> {
       controller.initialize().then((_) {
         if (!mounted) return;
         setState(() => _ready = true);
-        controller.setVolume(1.0).then((_) => controller.play()).catchError((Object e) {
+        controller.setVolume(1).then((_) => controller.play()).catchError((Object e) {
           debugPrint('[VideoSplash] play() failed: $e');
         });
       }).catchError((Object e) {

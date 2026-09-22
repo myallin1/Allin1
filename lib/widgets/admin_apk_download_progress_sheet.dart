@@ -79,7 +79,7 @@ class _ApkDownloadSheetState extends State<_ApkDownloadSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _error = 'Download failed. Check your connection '
-            'and try again.\n\n$e');
+            'and try again.\n\n$e',);
       }
     }
   }
@@ -97,7 +97,7 @@ class _ApkDownloadSheetState extends State<_ApkDownloadSheet> {
             Row(
               children: [
                 const Icon(Icons.android_rounded,
-                    color: Color(0xFF3DDC84), size: 22),
+                    color: Color(0xFF3DDC84), size: 22,),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -136,14 +136,14 @@ class _ApkDownloadSheetState extends State<_ApkDownloadSheet> {
                   ),
                   child: Text('Close',
                       style: GoogleFonts.outfit(
-                          color: Colors.white, fontWeight: FontWeight.w700)),
+                          color: Colors.white, fontWeight: FontWeight.w700,),),
                 ),
               ),
             ] else if (_done) ...[
               Row(
                 children: [
                   const Icon(Icons.check_circle_rounded,
-                      color: Color(0xFF3DDC84), size: 18),
+                      color: Color(0xFF3DDC84), size: 18,),
                   const SizedBox(width: 8),
                   Text(
                     'Downloaded — tap Install on the next screen',
@@ -168,7 +168,7 @@ class _ApkDownloadSheetState extends State<_ApkDownloadSheet> {
                   ),
                   child: Text('Done',
                       style: GoogleFonts.outfit(
-                          color: Colors.white, fontWeight: FontWeight.w700)),
+                          color: Colors.white, fontWeight: FontWeight.w700,),),
                 ),
               ),
             ] else ...[

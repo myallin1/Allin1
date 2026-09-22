@@ -66,7 +66,7 @@ class CloudinaryUploadService {
   /// submissions each uploading 3 document photos, uncontrolled sizes
   /// eat into Cloudinary's free-tier 25GB storage/bandwidth fast. Now
   /// iterates quality first, then dimension, until the result is under
-  /// [targetBytes] or the quality/size floor is hit — so output size
+  /// `targetBytes` or the quality/size floor is hit — so output size
   /// is actually bounded, not just "usually smaller than the original".
   ///
   /// UPDATED (Aug 11 2026 — "Silicon Valley standard" HD-clarity pass,
@@ -195,7 +195,7 @@ class CloudinaryUploadService {
   /// Uploads raw image bytes to Cloudinary and returns the resulting
   /// `secure_url`. [folder] is optional and just organizes uploads in
   /// the Cloudinary media library (e.g. 'home_kitchen_menu/{sellerId}').
-  /// Bytes are compressed client-side first — see [_compress].
+  /// Bytes are compressed client-side first — see `compressImage`.
   ///
   /// [targetBytes] defaults to ~100KB (fine for casual photos like menu
   /// items). Pass a higher value (e.g. 180-220KB) for KYC/ID document

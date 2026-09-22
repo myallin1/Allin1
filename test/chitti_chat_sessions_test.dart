@@ -11,9 +11,9 @@
 // tests exist so nobody quietly restores that behaviour while tidying.
 import 'dart:io';
 
+import 'package:erode_superapp/services/chitti_chat_history_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-import 'package:erode_superapp/services/chitti_chat_history_service.dart';
 
 void main() {
   setUpAll(() async {

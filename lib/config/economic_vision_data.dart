@@ -116,7 +116,7 @@ class EconomicVisionData {
       label: 'ஈ-காமர்ஸ்',
       icon: Icons.shopping_bag_rounded,
       amount: '₹8,540 – 14,940 கோடி',
-      barValue: 1.0,
+      barValue: 1,
     ),
     VisionSector(
       label: 'மளிகை / குயிக் காமர்ஸ்',

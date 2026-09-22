@@ -130,7 +130,7 @@ class _BugReportsScreenState extends State<BugReportsScreen> {
               Text(
                 r['summary']?.toString() ?? '',
                 style: GoogleFonts.outfit(
-                    color: _text, fontWeight: FontWeight.w800, fontSize: 17),
+                    color: _text, fontWeight: FontWeight.w800, fontSize: 17,),
               ),
               const SizedBox(height: 14),
               _kv('What the customer said', r['details']?.toString() ?? '—'),
@@ -195,11 +195,11 @@ class _BugReportsScreenState extends State<BugReportsScreen> {
           children: [
             Text(k,
                 style: GoogleFonts.outfit(
-                    color: _muted, fontSize: 10.5, fontWeight: FontWeight.w700),),
+                    color: _muted, fontSize: 10.5, fontWeight: FontWeight.w700,),),
             const SizedBox(height: 2),
             Text(v,
                 style: GoogleFonts.outfit(
-                    color: _text, fontSize: 13, height: 1.35),),
+                    color: _text, fontSize: 13, height: 1.35,),),
           ],
         ),
       );
@@ -319,7 +319,7 @@ class _BugReportsScreenState extends State<BugReportsScreen> {
                     Text(
                       '${reports.length} shown',
                       style: GoogleFonts.outfit(
-                          color: _muted, fontWeight: FontWeight.w600),
+                          color: _muted, fontWeight: FontWeight.w600,),
                     ),
                     Text(
                       '$openHigh high-severity open',
@@ -388,12 +388,10 @@ class _BugReportsScreenState extends State<BugReportsScreen> {
                                           false)
                                         r['screen'].toString(),
                                       if (ts != null)
-                                        '${ts.day}/${ts.month} '
-                                            '${ts.hour.toString().padLeft(2, '0')}:'
-                                            '${ts.minute.toString().padLeft(2, '0')}',
+                                        '${ts.day}/${ts.month} ${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}',
                                     ].join('  •  '),
                                     style: GoogleFonts.outfit(
-                                        color: _muted, fontSize: 10.5),
+                                        color: _muted, fontSize: 10.5,),
                                   ),
                                 ],
                               ),

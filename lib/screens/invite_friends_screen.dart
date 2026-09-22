@@ -163,7 +163,7 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: _text),
         title: Text('Invite Friends',
-            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: _text)),
+            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: _text),),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _pink))
@@ -173,7 +173,7 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
                     padding: const EdgeInsets.all(28),
                     child: Text(_error!,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.outfit(color: _muted, fontSize: 13)),
+                        style: GoogleFonts.outfit(color: _muted, fontSize: 13),),
                   ),
                 )
               : ListView(
@@ -206,7 +206,7 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
             Text('Share MyAllin1 with friends',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.outfit(
-                    color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
+                    color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800,),),
             const SizedBox(height: 6),
             Text(
               _invited == 0
@@ -214,7 +214,7 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
                   : 'You have invited $_invited ${_invited == 1 ? 'friend' : 'friends'} so far. Thank you!',
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(
-                  color: Colors.white.withValues(alpha: 0.92), fontSize: 12.5),
+                  color: Colors.white.withValues(alpha: 0.92), fontSize: 12.5,),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -224,13 +224,13 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
                 icon: const Icon(Icons.chat_rounded, size: 18),
                 label: Text('Share via WhatsApp',
                     style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.w800, fontSize: 14)),
+                        fontWeight: FontWeight.w800, fontSize: 14,),),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _whatsapp,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),),
                 ),
               ),
             ),
@@ -249,11 +249,11 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
           children: [
             Text('Or let them scan this',
                 style: GoogleFonts.outfit(
-                    color: _text, fontSize: 14, fontWeight: FontWeight.w800)),
+                    color: _text, fontSize: 14, fontWeight: FontWeight.w800,),),
             const SizedBox(height: 4),
             Text('Your friend just points their camera at it — nothing to type.',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(color: _muted, fontSize: 11.5)),
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11.5),),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
@@ -270,22 +270,21 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
               ),
               child: QrImageView(
                 data: _link,
-                version: QrVersions.auto,
                 size: 208,
                 backgroundColor: Colors.white,
                 // H so the code stays readable off a phone screen at an
                 // angle, in poor light, with a finger partly over it.
                 errorCorrectionLevel: QrErrorCorrectLevel.H,
                 eyeStyle: const QrEyeStyle(
-                    eyeShape: QrEyeShape.circle, color: _pink2),
+                    eyeShape: QrEyeShape.circle, color: _pink2,),
                 dataModuleStyle: const QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.circle, color: _text),
+                    dataModuleShape: QrDataModuleShape.circle, color: _text,),
               ),
             ),
             const SizedBox(height: 12),
             Text('Code: ${_code ?? ''}',
                 style: GoogleFonts.robotoMono(
-                    color: _muted, fontSize: 12, fontWeight: FontWeight.w600)),
+                    color: _muted, fontSize: 12, fontWeight: FontWeight.w600,),),
           ],
         ),
       );
@@ -300,7 +299,7 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
           children: [
             Expanded(
               child: Text(_link,
-                  style: GoogleFonts.outfit(color: _text, fontSize: 12.5)),
+                  style: GoogleFonts.outfit(color: _text, fontSize: 12.5),),
             ),
             TextButton.icon(
               onPressed: () {
@@ -312,7 +311,7 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
               icon: const Icon(Icons.copy_rounded, size: 15, color: _pink2),
               label: Text('Copy',
                   style: GoogleFonts.outfit(
-                      color: _pink2, fontSize: 12, fontWeight: FontWeight.w700)),
+                      color: _pink2, fontSize: 12, fontWeight: FontWeight.w700,),),
             ),
           ],
         ),
@@ -323,7 +322,7 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
         children: [
           Text('How it works',
               style: GoogleFonts.outfit(
-                  color: _text, fontSize: 13.5, fontWeight: FontWeight.w800)),
+                  color: _text, fontSize: 13.5, fontWeight: FontWeight.w800,),),
           const SizedBox(height: 10),
           _step(1, 'Send your link or show your QR to a friend.'),
           _step(2, 'They open it — MyAllin1 loads straight in their browser.'),
@@ -345,7 +344,7 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
                   style: GoogleFonts.outfit(
                       color: Colors.white,
                       fontSize: 11,
-                      fontWeight: FontWeight.w800)),
+                      fontWeight: FontWeight.w800,),),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -353,7 +352,7 @@ class _InviteFriendsScreenState extends State<InviteFriendsScreen> {
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(text,
                     style: GoogleFonts.outfit(
-                        color: _muted, fontSize: 12, height: 1.45)),
+                        color: _muted, fontSize: 12, height: 1.45,),),
               ),
             ),
           ],

@@ -12,9 +12,8 @@
 // These cases are the real voice names from the devices this app ships
 // to. If someone simplifies the voice table back into one substring
 // check, this is what fails.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/services/chitti/chitti_voice_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('ChittiVoiceOption', () {
@@ -104,7 +103,7 @@ void _platformRateTests() {
 
     test('web never leaves the range browsers accept', () {
       expect(ChittiVoiceService.platformRate(1.5, isWeb: true), 2.0);
-      expect(ChittiVoiceService.platformRate(0.0, isWeb: true), 0.1);
+      expect(ChittiVoiceService.platformRate(0, isWeb: true), 0.1);
     });
 
     test('no tone ends up dragging on web', () {

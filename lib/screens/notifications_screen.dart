@@ -851,6 +851,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         .collection('notifications')
         .where('userId', isEqualTo: userId)
         .where('read', isEqualTo: false)
+        .limit(50)
         .get();
 
     final batch = FirebaseFirestore.instance.batch();

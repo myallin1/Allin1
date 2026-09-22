@@ -9,9 +9,9 @@
 //      the generic pep lines instead of printing an empty section.
 import 'dart:io';
 
+import 'package:erode_superapp/services/chitti/hero_memory_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-import 'package:erode_superapp/services/chitti/hero_memory_service.dart';
 
 void main() {
   // Hive needs a home in a unit test; it does not need a device — see
@@ -25,9 +25,7 @@ void main() {
     await Hive.openBox<dynamic>('chitti_hero_memory');
   });
 
-  setUp(() {
-    HeroMemoryService.clearForTesting();
-  });
+  setUp(HeroMemoryService.clearForTesting);
 
   group('brand-new hero', () {
     test('prompt profile is empty, not an empty header', () {

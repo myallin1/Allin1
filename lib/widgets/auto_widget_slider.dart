@@ -8,8 +8,7 @@ class AutoWidgetSlider extends StatefulWidget {
   final Duration duration;
 
   const AutoWidgetSlider({
-    super.key,
-    required this.children,
+    required this.children, super.key,
     this.width = 32,
     this.height = 32,
     this.duration = const Duration(seconds: 3),
@@ -63,9 +62,9 @@ class _AutoWidgetSliderState extends State<AutoWidgetSlider> {
         duration: const Duration(milliseconds: 1200), // Smooth crossfade
         switchInCurve: Curves.easeInOutCubic,
         switchOutCurve: Curves.easeInOutCubic,
-        transitionBuilder: (Widget child, Animation<double> animation) {
+        transitionBuilder: (child, animation) {
           final slideAnim = Tween<Offset>(
-            begin: const Offset(0.05, 0.0), // Slight horizontal slide
+            begin: const Offset(0.05, 0), // Slight horizontal slide
             end: Offset.zero,
           ).animate(animation);
 
@@ -82,7 +81,6 @@ class _AutoWidgetSliderState extends State<AutoWidgetSlider> {
           width: widget.width,
           height: widget.height,
           child: FittedBox(
-            fit: BoxFit.contain,
             child: widget.children[_currentIndex],
           ),
         ),

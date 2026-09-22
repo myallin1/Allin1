@@ -101,7 +101,7 @@ class CloudinaryAdminService {
       kCloudinaryApiSecret != 'YOUR_API_SECRET_HERE';
 
   Map<String, String> get _authHeaders {
-    final credentials = '$kCloudinaryApiKey:$kCloudinaryApiSecret';
+    const credentials = '$kCloudinaryApiKey:$kCloudinaryApiSecret';
     final base64Credentials = base64Encode(utf8.encode(credentials));
     return {
       'Authorization': 'Basic $base64Credentials',

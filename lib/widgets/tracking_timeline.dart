@@ -15,9 +15,7 @@ import '../utils/service_request_labels.dart';
 
 class TrackingTimeline extends StatelessWidget {
   const TrackingTimeline({
-    super.key,
-    required this.currentStatus,
-    required this.requestType,
+    required this.currentStatus, required this.requestType, super.key,
   });
 
   final String currentStatus;

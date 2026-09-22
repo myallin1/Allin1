@@ -82,19 +82,10 @@ class HeroForegroundService {
                 'Shows while you are Online and available for tasks. '
                 'Keeps the app responsive to new ride/task requests in '
                 'the background.',
-            // LOW, no sound/vibration — this is a persistent status
-            // indicator, not an alert. The loud ringtone/notification
-            // for an actual incoming ride/task is a completely
-            // separate channel (see hero_ride_notification_service.dart)
-            // and is unaffected by this.
-            channelImportance: NotificationChannelImportance.LOW,
-            priority: NotificationPriority.LOW,
           ),
           iosNotificationOptions: const IOSNotificationOptions(),
           foregroundTaskOptions: ForegroundTaskOptions(
             eventAction: ForegroundTaskEventAction.repeat(60000),
-            autoRunOnBoot: false,
-            allowWifiLock: false,
           ),
         );
         _initialized = true;

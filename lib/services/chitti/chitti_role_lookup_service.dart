@@ -29,15 +29,15 @@
 // equality filter needs a composite index, and on the Spark plan a
 // missing index is a hard query failure at runtime, not a slow query.
 // A bounded read plus a local filter cannot fail that way.
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
-import 'dart:async';
-
+import 'chitti_accessibility_bridge.dart';
 import 'chitti_enquiry_service.dart';
 import 'chitti_local_read.dart';
-import 'chitti_accessibility_bridge.dart';
 import 'chitti_summarizer.dart';
 import 'hero_memory_service.dart';
 
@@ -270,7 +270,7 @@ class ChittiRoleLookupService {
       final open = snap.docs
           .where((d) => _activeHeroRideStatuses.contains(
                 d.data()['status'] as String?,
-              ))
+              ),)
           .toList();
       if (open.isEmpty) {
         return 'Nothing is pending on you — you are clear. Stay online and '
@@ -507,7 +507,8 @@ class ChittiRoleLookupService {
       }
 
       final now = DateTime.now();
-      bool isToday(dynamic ts) {
+      bool isToday(ts) {
+
         if (ts is! Timestamp) return false;
         final t = ts.toDate();
         return t.year == now.year && t.month == now.month && t.day == now.day;
@@ -606,7 +607,6 @@ class ChittiRoleLookupService {
         final summary = ChittiSummarizer.heuristicSummary(
           sender: who,
           message: q,
-          isTamil: true,
         );
         return '• $summary';
       }).join('\n');

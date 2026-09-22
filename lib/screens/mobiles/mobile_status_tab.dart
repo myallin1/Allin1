@@ -253,8 +253,7 @@ class _MobileStatusTabState extends State<MobileStatusTab>
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      (details['phoneModel'] as String?)?.trim().isNotEmpty ==
-                              true
+                      (details['phoneModel'] as String?)?.trim().isNotEmpty ?? false
                           ? details['phoneModel'] as String
                           : ((details['issue'] as String?) ?? '')
                               .split('\n')
@@ -303,19 +302,19 @@ class _MobileStatusTabState extends State<MobileStatusTab>
     switch (intent) {
       case 'buy_new_mobile':
         return const _IntentMeta(
-            'New phone purchase', Icons.smartphone_rounded, kMobPink);
+            'New phone purchase', Icons.smartphone_rounded, kMobPink,);
       case 'buy_used_mobile':
         return const _IntentMeta(
-            'Used phone purchase', Icons.autorenew_rounded, kMobBlue);
+            'Used phone purchase', Icons.autorenew_rounded, kMobBlue,);
       case 'sell_used_mobile':
         return const _IntentMeta(
-            'Sell your phone', Icons.sell_rounded, kMobGold);
+            'Sell your phone', Icons.sell_rounded, kMobGold,);
       case 'mobile_repair':
         return const _IntentMeta(
-            'Mobile repair', Icons.build_circle_outlined, kMobGreen);
+            'Mobile repair', Icons.build_circle_outlined, kMobGreen,);
       default:
         return const _IntentMeta(
-            'Mobile request', Icons.smartphone_rounded, kMobMuted);
+            'Mobile request', Icons.smartphone_rounded, kMobMuted,);
     }
   }
 

@@ -74,7 +74,7 @@ class _AppSplashVideoScreenState extends State<AppSplashVideoScreen> {
         // blocks unmuted playback, the video simply plays without
         // sound (or waits for a user gesture) — the safety timer above
         // still guarantees the app opens on time either way.
-        controller.setVolume(1.0).then((_) => controller.play()).catchError((Object e) {
+        controller.setVolume(1).then((_) => controller.play()).catchError((Object e) {
           debugPrint('[AppSplashVideo] play() failed: $e');
         });
       }).catchError((Object e) {

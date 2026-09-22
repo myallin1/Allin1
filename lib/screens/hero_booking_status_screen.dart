@@ -26,10 +26,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/service_request_model.dart';
+import '../services/firestore_usage_tracking.dart';
 import '../utils/service_request_labels.dart';
 import 'hero_booking_tracking_screen.dart';
 import 'hero_search_radar_screen.dart';
-import '../services/firestore_usage_tracking.dart';
 
 const Color _kPink = Color(0xFFFF4FA3);
 const Color _kBg = Color(0xFFFFFFFF);
@@ -69,6 +69,7 @@ class HeroBookingStatusScreen extends StatelessWidget {
                   .collection('service_requests')
                   .where('customerId', isEqualTo: user.uid)
                   .where('requestType', isEqualTo: 'hero_booking')
+                  .limit(30)
                   .trackedSnapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {

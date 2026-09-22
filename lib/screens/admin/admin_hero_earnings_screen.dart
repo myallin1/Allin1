@@ -36,12 +36,12 @@
 // equality filter would require a new Firestore composite index).
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../widgets/admin/cached_analytics_view.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/hero_wallet_service.dart';
+import '../../widgets/admin/cached_analytics_view.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -83,7 +83,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
         backgroundColor: _card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Send top-up reminder?',
-            style: TextStyle(color: _text, fontWeight: FontWeight.w800)),
+            style: TextStyle(color: _text, fontWeight: FontWeight.w800),),
         content: const Text(
           'Every hero currently in minus gets one notification showing '
           'their own amount owed. Heroes who owe nothing are not '
@@ -100,7 +100,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: _gold),
             child: const Text('Send',
                 style: TextStyle(
-                    color: Colors.black, fontWeight: FontWeight.w800)),
+                    color: Colors.black, fontWeight: FontWeight.w800,),),
           ),
         ],
       ),
@@ -117,7 +117,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
         SnackBar(
           content: Text(n == 0
               ? 'No hero is in minus — nothing sent.'
-              : 'Reminder sent to $n hero(es).'),
+              : 'Reminder sent to $n hero(es).',),
           backgroundColor: n == 0 ? _muted : _green,
         ),
       );
@@ -136,7 +136,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
   /// Hive cache, where a whole number stored as 50.0 can return as int
   /// 50. `as double` happens to work under dart2js (one number type) but
   /// throws on native Android — so never assert the type, coerce it.
-  static double _amountOf(dynamic v) {
+  static double _amountOf(v) {
     if (v is num) return v.toDouble();
     if (v is String) return double.tryParse(v) ?? 0;
     return 0;
@@ -238,7 +238,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
         iconTheme: const IconThemeData(color: _text),
         title: Text('Hero Earnings',
             style: GoogleFonts.outfit(
-                color: _text, fontWeight: FontWeight.w800, fontSize: 18)),
+                color: _text, fontWeight: FontWeight.w800, fontSize: 18,),),
       ),
       body: CachedAnalyticsView<Map<String, dynamic>>(
         cacheKey: 'admin_hero_earnings',
@@ -301,7 +301,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
           // Highest net first — the question an admin actually has is
           // "who is earning and who is not".
           entries.sort((a, b) =>
-              (b.value[0] - b.value[1]).compareTo(a.value[0] - a.value[1]));
+              (b.value[0] - b.value[1]).compareTo(a.value[0] - a.value[1]),);
 
           final totalEarned =
               perHero.values.fold<double>(0, (s, v) => s + v[0]);
@@ -315,11 +315,11 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
                 children: [
                   Expanded(
                       child: _stat('Paid to heroes',
-                          '₹${totalEarned.toStringAsFixed(2)}', _green)),
+                          '₹${totalEarned.toStringAsFixed(2)}', _green,),),
                   const SizedBox(width: 10),
                   Expanded(
                       child: _stat('Deducted',
-                          '−₹${totalDeducted.toStringAsFixed(2)}', _red)),
+                          '−₹${totalDeducted.toStringAsFixed(2)}', _red,),),
                 ],
               ),
               const SizedBox(height: 10),
@@ -329,7 +329,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
                       child: _stat(
                           'Net',
                           '₹${(totalEarned - totalDeducted).toStringAsFixed(2)}',
-                          _gold)),
+                          _gold,),),
                   const SizedBox(width: 10),
                   Expanded(child: _stat('Heroes', '${perHero.length}', _text)),
                 ],
@@ -356,17 +356,17 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
                   children: [
                     Expanded(
                         child: _stat('Owed by heroes',
-                            '₹${owed.toStringAsFixed(2)}', _red)),
+                            '₹${owed.toStringAsFixed(2)}', _red,),),
                     const SizedBox(width: 10),
                     Expanded(
-                        child: _stat('Heroes in minus', '$inMinus', _gold)),
+                        child: _stat('Heroes in minus', '$inMinus', _gold),),
                     const SizedBox(width: 10),
                     Expanded(
                         child: _stat('Topped up',
-                            '₹${topped.toStringAsFixed(0)}', _green)),
+                            '₹${topped.toStringAsFixed(0)}', _green,),),
                   ],
                 );
-              }),
+              },),
               // Sits directly under the numbers it acts on, so an admin
               // sees "12 heroes in minus" and the button to remind them
               // in the same glance.
@@ -381,7 +381,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
                           width: 15,
                           height: 15,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: _gold),
+                              strokeWidth: 2, color: _gold,),
                         )
                       : const Icon(Icons.campaign_rounded, size: 17),
                   label: Text(
@@ -389,13 +389,13 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
                         ? 'Sending…'
                         : 'Send top-up reminder to heroes in minus',
                     style: GoogleFonts.outfit(
-                        fontSize: 12.5, fontWeight: FontWeight.w700),
+                        fontSize: 12.5, fontWeight: FontWeight.w700,),
                   ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: _gold,
                     side: const BorderSide(color: _gold),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                        borderRadius: BorderRadius.circular(12),),
                   ),
                 ),
               ),
@@ -406,7 +406,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
                     color: _muted,
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1),
+                    letterSpacing: 1.1,),
               ),
               const SizedBox(height: 8),
               if (entries.isEmpty)
@@ -448,7 +448,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
         // Filter chips cost NOTHING — they re-slice the cached snapshot.
         // Said out loud so an admin is not afraid to use them.
         Text('Filters re-use the last Fetch — switching these is free',
-            style: GoogleFonts.outfit(color: _muted, fontSize: 10.5)),
+            style: GoogleFonts.outfit(color: _muted, fontSize: 10.5),),
         const SizedBox(height: 6),
         Wrap(
           spacing: 6,
@@ -483,7 +483,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
             child: ActionChip(
               backgroundColor: _gold.withValues(alpha: 0.18),
               label: const Text('Showing one hero — tap to clear',
-                  style: TextStyle(color: _gold, fontSize: 11)),
+                  style: TextStyle(color: _gold, fontSize: 11),),
               onPressed: () => setState(() => _heroFilter = null),
             ),
           ),
@@ -507,7 +507,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
             style: GoogleFonts.outfit(
                 color: on ? Colors.black : _muted,
                 fontSize: 11.5,
-                fontWeight: FontWeight.w700)),
+                fontWeight: FontWeight.w700,),),
       ),
     );
   }
@@ -524,11 +524,11 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label,
-              style: GoogleFonts.outfit(color: _muted, fontSize: 10.5)),
+              style: GoogleFonts.outfit(color: _muted, fontSize: 10.5),),
           const SizedBox(height: 4),
           Text(value,
               style: GoogleFonts.outfit(
-                  color: color, fontSize: 17, fontWeight: FontWeight.w800)),
+                  color: color, fontSize: 17, fontWeight: FontWeight.w800,),),
         ],
       ),
     );
@@ -558,7 +558,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
           color: _card,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: _heroFilter == id ? _gold : _border),
+              color: _heroFilter == id ? _gold : _border,),
         ),
         child: Row(
           children: [
@@ -570,7 +570,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
                       style: GoogleFonts.outfit(
                           color: _text,
                           fontSize: 13.5,
-                          fontWeight: FontWeight.w700)),
+                          fontWeight: FontWeight.w700,),),
                   const SizedBox(height: 2),
                   Text(
                     phone.isEmpty ? '$txCount txn' : '$phone · $txCount txn',
@@ -584,7 +584,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
                     const SizedBox(height: 3),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                          horizontal: 6, vertical: 2,),
                       decoration: BoxDecoration(
                         color: (walletBalance < 0 ? _red : _green)
                             .withValues(alpha: 0.15),
@@ -612,7 +612,7 @@ class _AdminHeroEarningsScreenState extends State<AdminHeroEarningsScreen> {
                     style: GoogleFonts.outfit(
                         color: net < 0 ? _red : _green,
                         fontSize: 14,
-                        fontWeight: FontWeight.w800)),
+                        fontWeight: FontWeight.w800,),),
                 if (deducted > 0)
                   Text(
                     '₹${earned.toStringAsFixed(0)} − ₹${deducted.toStringAsFixed(0)}',

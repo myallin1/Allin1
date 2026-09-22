@@ -76,10 +76,10 @@ class GiftCouponService {
               !c.isExpired &&
               c.status != GiftCouponStatus.redeemed &&
               c.status != GiftCouponStatus.claimed &&
-              c.status != GiftCouponStatus.cancelled)
+              c.status != GiftCouponStatus.cancelled,)
           .toList()
         ..sort((a, b) => (b.createdAt ?? DateTime(0))
-            .compareTo(a.createdAt ?? DateTime(0)));
+            .compareTo(a.createdAt ?? DateTime(0)),);
       return coupons;
     });
   }
@@ -152,7 +152,7 @@ class GiftCouponService {
           .map((d) => GiftCouponModel.fromFirestore(d.data(), d.id))
           .toList()
         ..sort((a, b) => (b.createdAt ?? DateTime(0))
-            .compareTo(a.createdAt ?? DateTime(0)));
+            .compareTo(a.createdAt ?? DateTime(0)),);
       return coupons;
     });
   }

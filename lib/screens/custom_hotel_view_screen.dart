@@ -38,7 +38,7 @@ import '../services/cloudinary_upload_service.dart';
 import '../services/custom_hotel_service.dart';
 import '../services/gift_coupon_service.dart';
 import '../services/service_request_service.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../widgets/cached_cloud_image.dart';
 
 const Color _kBg = Color(0xFFFFFFFF);
 const Color _kText = Color(0xFF1A1A2E);
@@ -130,8 +130,8 @@ class _CustomHotelViewScreenState extends State<CustomHotelViewScreen> {
         },
       ),
     );
-    if (placed == true && mounted) {
-      setState(() => _cart.clear());
+    if ((placed ?? false) && mounted) {
+      setState(_cart.clear);
     }
   }
 
@@ -155,7 +155,6 @@ class _CustomHotelViewScreenState extends State<CustomHotelViewScreen> {
                       logoUrl,
                       width: 32,
                       height: 32,
-                      fit: BoxFit.cover,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -244,7 +243,7 @@ class _CustomHotelViewScreenState extends State<CustomHotelViewScreen> {
               final cartCount = _cart.values.fold<int>(0, (a, b) => a + b);
               final cartTotal = items
                   .where((i) => _cart.containsKey(i.id))
-                  .fold<double>(0, (sum, i) => sum + i.price * (_cart[i.id] ?? 0));
+                  .fold<double>(0, (total, i) => total + i.price * (_cart[i.id] ?? 0));
 
               return Stack(
                 children: [
@@ -263,7 +262,7 @@ class _CustomHotelViewScreenState extends State<CustomHotelViewScreen> {
                         ),
                         child: Row(
                           children: [
-                            Container(
+                            DecoratedBox(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
@@ -289,7 +288,6 @@ class _CustomHotelViewScreenState extends State<CustomHotelViewScreen> {
                                         CloudinaryUploadService.optimizedUrl(item.photoUrl, width: 256),
                                         width: 80,
                                         height: 80,
-                                        fit: BoxFit.cover,
                                       ),
                               ),
                             ),
@@ -310,16 +308,14 @@ class _CustomHotelViewScreenState extends State<CustomHotelViewScreen> {
                             ),
                             // NEW — Add to Cart / quantity stepper
                             // (CTO mandate #1).
-                            qty == 0
-                                ? OutlinedButton(
+                            if (qty == 0) OutlinedButton(
                                     style: OutlinedButton.styleFrom(
                                       side: const BorderSide(color: _kPink),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
                                     onPressed: () => _addToCart(item.id),
                                     child: const Text('Add', style: TextStyle(color: _kPink, fontWeight: FontWeight.w700)),
-                                  )
-                                : Row(
+                                  ) else Row(
                                     children: [
                                       IconButton(
                                         icon: const Icon(Icons.remove_circle_outline, color: _kPink, size: 20),
@@ -434,7 +430,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     super.dispose();
   }
 
-  double get _total => widget.cartItems.fold<double>(0, (sum, i) => sum + i.price * (_qty[i.id] ?? 0));
+  double get _total => widget.cartItems.fold<double>(0, (total, i) => total + i.price * (_qty[i.id] ?? 0));
   num get _discount => _appliedCoupon?.value ?? 0;
   double get _payableTotal => (_total - _discount) < 0 ? 0 : _total - _discount;
 
@@ -559,7 +555,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                 'name': i.name,
                 'price': i.price,
                 'quantity': _qty[i.id] ?? 0,
-              })
+              },)
           .toList();
       final customerName = _nameCtrl.text.trim().isNotEmpty ? _nameCtrl.text.trim() : (user.displayName ?? 'Customer');
       final customerPhone = _phoneCtrl.text.trim().isNotEmpty
@@ -684,7 +680,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                       child: Text('${item.name} x$qty', style: GoogleFonts.outfit(color: _kText, fontSize: 13)),
                     ),
                     Text('₹${(item.price * qty).toStringAsFixed(0)}',
-                        style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w700, fontSize: 13)),
+                        style: GoogleFonts.outfit(color: _kText, fontWeight: FontWeight.w700, fontSize: 13),),
                     IconButton(
                       icon: const Icon(Icons.remove_circle_outline, color: _kPink, size: 18),
                       onPressed: () => setState(() {
@@ -789,4 +785,3 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     );
   }
 }
-

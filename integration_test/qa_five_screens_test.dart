@@ -49,6 +49,7 @@
 // the Firestore report — verify this specific part on your target
 // device before relying on `screenshotUrl` showing up in reports.
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:erode_superapp/firebase_options.dart';
 import 'package:erode_superapp/main_customer.dart' show CustomerApp;
 import 'package:erode_superapp/services/cloudinary_upload_service.dart';
 import 'package:erode_superapp/services/guru_admin_api_service.dart';
@@ -59,8 +60,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:integration_test/integration_test.dart';
-
-import '../lib/firebase_options.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -188,7 +187,7 @@ void main() {
       );
 
       expect(allPresent, isTrue,
-          reason: 'See ux_audit_reports/dashboard/tiles_present for details if this fails.');
+          reason: 'See ux_audit_reports/dashboard/tiles_present for details if this fails.',);
     });
 
     testWidgets('Bike Booking: opens and vehicle category is selectable', (tester) async {

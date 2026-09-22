@@ -389,10 +389,9 @@ class MapService extends ChangeNotifier {
         return 'Ola Maps';
       case MapProviderType.osm:
         return 'OpenStreetMap';
-      default:
-        return 'Unknown';
     }
   }
+
 
   Map<String, dynamic> getDebugInfo() {
     return {

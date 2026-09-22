@@ -82,17 +82,17 @@ class ChittiScreenAgent {
   static final RegExp _destructiveElement = RegExp(
     r'\b('
     // money
-    r'pay|paying|payment|send money|transfer|withdraw|deposit|recharge|'
-    r'buy|purchase|checkout|place order|confirm order|subscribe|'
+    'pay|paying|payment|send money|transfer|withdraw|deposit|recharge|'
+    'buy|purchase|checkout|place order|confirm order|subscribe|'
     // destruction
-    r'delete|remove|clear all|erase|discard|uninstall|reset|wipe|'
-    r'cancel order|cancel booking|deactivate|close account|'
+    'delete|remove|clear all|erase|discard|uninstall|reset|wipe|'
+    'cancel order|cancel booking|deactivate|close account|'
     // decisions about people
-    r'approve|reject|verify|confirm|block|unblock|ban|suspend|'
+    'approve|reject|verify|confirm|block|unblock|ban|suspend|'
     // outbound communication
-    r'send|post|publish|share|submit|'
+    'send|post|publish|share|submit|'
     // account
-    r'log ?out|sign ?out|change password|delete account'
+    'log ?out|sign ?out|change password|delete account'
     r')\b',
     caseSensitive: false,
   );
@@ -109,11 +109,11 @@ class ChittiScreenAgent {
   // confirmation — see the two-layer note in the header.
   static final RegExp _sensitiveScreen = RegExp(
     r'\b('
-    r'upi|paytm|gpay|phonepe|netbanking|net banking|'
-    r'card number|cvv|expiry|ifsc|account number|a/c no|'
-    r'balance|wallet|amount|total payable|pay now|'
-    r'aadhaar|aadhar|pan card|kyc|otp|'
-    r'password|passcode|pin'
+    'upi|paytm|gpay|phonepe|netbanking|net banking|'
+    'card number|cvv|expiry|ifsc|account number|a/c no|'
+    'balance|wallet|amount|total payable|pay now|'
+    'aadhaar|aadhar|pan card|kyc|otp|'
+    'password|passcode|pin'
     r')\b',
     caseSensitive: false,
   );

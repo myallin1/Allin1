@@ -8,8 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../widgets/cached_cloud_image.dart'; // Task 3
 import 'order_tracking_screen.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart'; // Task 3
 
 // ── Brand tokens (mirrors dashboard) ─────────────────────────────
 const _kBg     = Color(0xFF0D0B1A);
@@ -509,7 +509,6 @@ class _ProductCardState extends State<_ProductCard>
                 p.imageUrl,
                 width: double.infinity,
                 height: double.infinity,
-                fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => ColoredBox(
                   color: _kCard,
                   child: Center(child: Text(
@@ -607,4 +606,3 @@ class _ProductCardState extends State<_ProductCard>
     );
   }
 }
-

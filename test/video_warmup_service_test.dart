@@ -16,9 +16,8 @@
 // WebView and cannot run in a unit test, which is precisely how these
 // bugs got in. A String stands in for the player here; the rules are
 // what is being tested.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/services/video_warmup_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   late List<String> closed;

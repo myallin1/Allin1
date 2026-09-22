@@ -203,7 +203,8 @@ linter:
     avoid_catching_errors: true
     
     # Avoid classes with only static members
-    avoid_classes_with_only_static_members: true
+    avoid_classes_with_only_static_members: false
+
     
     # Avoid double invocations
     avoid_double_and_int_checks: true

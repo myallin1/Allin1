@@ -106,7 +106,7 @@ class AffiliateService {
       final code = prefs.getString(kPendingCodeKey);
       if (code == null || code.isEmpty) return;
       final loggedKey = '$_kScanLoggedPrefix$code';
-      if (prefs.getBool(loggedKey) == true) return;
+      if (prefs.getBool(loggedKey) ?? false) return;
       await _codesRef.doc(code).set(
         {'scans': FieldValue.increment(1)},
         SetOptions(merge: true),
@@ -196,7 +196,7 @@ class AffiliateService {
         'email': (email ?? '').trim(),
         'city': (city ?? '').trim(),
         'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true),);
     } catch (e) {
       debugPrint('[AffiliateService] lead record skipped: $e');
     }
@@ -303,15 +303,15 @@ class AffiliateService {
         .trim()
         .toLowerCase()
         .replaceAll(RegExp(r'[\s_]+'), '-')
-        .replaceAll(RegExp(r'[^a-z0-9-]'), '')
-        .replaceAll(RegExp(r'-{2,}'), '-')
+        .replaceAll(RegExp('[^a-z0-9-]'), '')
+        .replaceAll(RegExp('-{2,}'), '-')
         .replaceAll(RegExp(r'^-+|-+$'), '');
 
     if (slug.length < 3 || slug.length > 32) return null;
     if (_reservedSlugs.contains(slug)) return null;
     // Must contain at least one letter — an all-digit slug reads as an
     // account number, which is the opposite of reassuring.
-    if (!RegExp(r'[a-z]').hasMatch(slug)) return null;
+    if (!RegExp('[a-z]').hasMatch(slug)) return null;
     return slug;
   }
 
@@ -427,7 +427,7 @@ class AffiliateService {
   /// Pause/resume a campaign. A paused code still scans, but the /q/
   /// page sends the visitor to the app root instead of the campaign
   /// destination — so a retired poster never 404s.
-  Future<void> setActive(String code, bool active) async {
+  Future<void> setActive(String code, {required bool active}) async {
     await _codesRef.doc(code).set({'active': active}, SetOptions(merge: true));
     await _linksRef.doc(code).set({'active': active}, SetOptions(merge: true));
   }
@@ -463,7 +463,7 @@ class AffiliateService {
     /// Also delete this code's rows in affiliate_scans. Off by default:
     /// scan rows are the raw analytics record, and an admin deleting a
     /// mistaken code usually wants the code gone, not the history of
-    /// every other report rewritten. Bounded to [scanDeleteLimit] so a
+    /// every other report rewritten. Bounded to `scanDeleteLimit` so a
     /// hugely-scanned code can never build an unbounded batch.
     bool alsoDeleteScans = false,
     int scanDeleteLimit = 400,

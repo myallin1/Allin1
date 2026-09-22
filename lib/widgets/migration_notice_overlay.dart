@@ -22,7 +22,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/migration_gate_service.dart';
 
 class MigrationGate extends StatelessWidget {
-  const MigrationGate({super.key, required this.child});
+  const MigrationGate({required this.child, super.key});
 
   final Widget child;
 

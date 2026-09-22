@@ -49,7 +49,7 @@ Future<void> maybeShowWhatsNew(BuildContext context) async {
 }
 
 class AdminWhatsNewSheet extends StatelessWidget {
-  const AdminWhatsNewSheet({super.key, required this.log, this.embedded = false});
+  const AdminWhatsNewSheet({required this.log, super.key, this.embedded = false});
 
   final AppChangelog log;
 
@@ -83,7 +83,7 @@ class AdminWhatsNewSheet extends StatelessWidget {
             Text(
               embedded ? 'In this build' : "What's new",
               style: GoogleFonts.outfit(
-                  color: _text, fontSize: 17, fontWeight: FontWeight.w700),
+                  color: _text, fontSize: 17, fontWeight: FontWeight.w700,),
             ),
           ],
         ),
@@ -95,7 +95,7 @@ class AdminWhatsNewSheet extends StatelessWidget {
         const SizedBox(height: 14),
         if (log.isEmpty)
           Text('No changes recorded for this build.',
-              style: GoogleFonts.outfit(color: _muted, fontSize: 13))
+              style: GoogleFonts.outfit(color: _muted, fontSize: 13),)
         else
           ConstrainedBox(
             constraints: BoxConstraints(
@@ -114,13 +114,13 @@ class AdminWhatsNewSheet extends StatelessWidget {
                       width: 5,
                       height: 5,
                       decoration: const BoxDecoration(
-                          color: _purple, shape: BoxShape.circle),
+                          color: _purple, shape: BoxShape.circle,),
                     ),
                     Expanded(
                       child: Text(
                         AppChangelogService.prettify(log.changes[i]),
                         style: GoogleFonts.outfit(
-                            color: _text, fontSize: 13, height: 1.45),
+                            color: _text, fontSize: 13, height: 1.45,),
                       ),
                     ),
                   ],
@@ -139,7 +139,7 @@ class AdminWhatsNewSheet extends StatelessWidget {
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(12),),
               ),
               child: const Text('Got it'),
             ),
@@ -147,7 +147,7 @@ class AdminWhatsNewSheet extends StatelessWidget {
           const SizedBox(height: 6),
           Center(
             child: Text('Also under Settings → version',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11),),
           ),
         ],
       ],

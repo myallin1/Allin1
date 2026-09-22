@@ -12,11 +12,11 @@
 //     hero opens the app;
 //   • too shy, and the customer this feature exists for is never
 //     served.
-import 'package:flutter_test/flutter_test.dart';
 import 'package:erode_superapp/services/chitti/chitti_order_escalation_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final now = DateTime(2026, 8, 28, 20, 0);
+  final now = DateTime(2026, 8, 28, 20);
 
   StrandedOrder order({DateTime? at}) => StrandedOrder(
         id: 'r1',
@@ -112,7 +112,7 @@ void main() {
     // half the brief. A silently rerouted order still looks to the
     // customer like nothing happened.
     test('there is a message and it is reassuring', () {
-      final m = ChittiOrderEscalationService.customerMessage;
+      const m = ChittiOrderEscalationService.customerMessage;
       expect(m.trim(), isNotEmpty);
       expect(m.toLowerCase(), contains('hero'));
     });

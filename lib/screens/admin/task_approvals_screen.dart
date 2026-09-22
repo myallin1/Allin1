@@ -260,7 +260,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 '🪙 $coinsReward coins',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 11,
                                   color: kGold,
                                   fontWeight: FontWeight.w700,
@@ -433,8 +433,8 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('❌ Task rejected. Coins refunded.'),
+          const SnackBar(
+            content: Text('❌ Task rejected. Coins refunded.'),
             backgroundColor: kRed,
             behavior: SnackBarBehavior.floating,
           ),
@@ -464,7 +464,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
           .trackedSnapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(
+          return const Center(
             child: CircularProgressIndicator(color: kGreen),
           );
         }
@@ -528,8 +528,8 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
             final totalRides = rides.length;
             final totalEarnings = rides.fold<num>(
               0,
-              (sum, ride) =>
-                  sum + (ride['fare'] as num),
+              (acc, ride) =>
+                  acc + (ride['fare'] as num),
             );
 
             return FutureBuilder<DocumentSnapshot>(
@@ -675,7 +675,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                                 children: [
                                   Text(
                                     '🏍️ $totalRides',
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w800,
                                       color: kGreen,
@@ -706,7 +706,7 @@ class _TaskApprovalsScreenState extends State<TaskApprovalsScreen> {
                                 children: [
                                   Text(
                                     '₹${totalEarnings.toInt()}',
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w800,
                                       color: kGold,

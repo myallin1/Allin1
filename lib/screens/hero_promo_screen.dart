@@ -71,17 +71,17 @@ class HeroPromoScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            _BenefitPoint(
+            const _BenefitPoint(
               icon: Icons.account_balance_wallet_rounded,
               title: '100% வருமானமும் உங்களுக்கே!',
               subtitle: 'உழைப்பவருக்கே முழு வருமானம்.',
             ),
-            _BenefitPoint(
+            const _BenefitPoint(
               icon: Icons.local_taxi_rounded,
               title: 'Taxi, Auto, Delivery & Transport Services',
               subtitle: 'August 15 முதல் ஈரோட்டிற்கு சுதந்திரம்.',
             ),
-            _BenefitPoint(
+            const _BenefitPoint(
               icon: Icons.engineering_rounded,
               title: 'Manpower & Other Services',
               subtitle: 'அனைத்து விதமான சேவைகளும்.',

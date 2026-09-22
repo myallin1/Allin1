@@ -11,8 +11,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'rewards_hub_screen.dart';
+
 import '../../services/firestore_usage_tracking.dart';
+import 'rewards_hub_screen.dart';
 
 // ── Theme ─────────────────────────────────────────────────────
 const Color _bg = Color(0xFF0A0A12);

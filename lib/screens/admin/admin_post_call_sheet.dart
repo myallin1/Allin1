@@ -54,7 +54,7 @@ class _PostCallSheet extends StatelessWidget {
   /// before it will resolve. Assumes India when no country code is
   /// present, which is true for every number this app deals with.
   String get _whatsappDigits {
-    var digits = number.replaceAll(RegExp(r'[^0-9]'), '');
+    var digits = number.replaceAll(RegExp('[^0-9]'), '');
     if (digits.length == 10) digits = '91$digits';
     return digits;
   }
@@ -95,13 +95,13 @@ class _PostCallSheet extends StatelessWidget {
             Text(
               'Call ended',
               style: GoogleFonts.outfit(
-                  color: _muted, fontSize: 12.5, fontWeight: FontWeight.w500),
+                  color: _muted, fontSize: 12.5, fontWeight: FontWeight.w500,),
             ),
             const SizedBox(height: 4),
             Text(
               number,
               style: GoogleFonts.outfit(
-                  color: _text, fontSize: 20, fontWeight: FontWeight.w700),
+                  color: _text, fontSize: 20, fontWeight: FontWeight.w700,),
             ),
             const SizedBox(height: 22),
             Row(
@@ -124,7 +124,7 @@ class _PostCallSheet extends StatelessWidget {
                   color: _whatsapp,
                   label: 'WhatsApp',
                   onTap: () => _launch(
-                      context, Uri.parse('https://wa.me/$_whatsappDigits')),
+                      context, Uri.parse('https://wa.me/$_whatsappDigits'),),
                 ),
               ],
             ),
@@ -169,7 +169,7 @@ class _Action extends StatelessWidget {
         Text(
           label,
           style: GoogleFonts.outfit(
-              color: _text, fontSize: 12.5, fontWeight: FontWeight.w600),
+              color: _text, fontSize: 12.5, fontWeight: FontWeight.w600,),
         ),
       ],
     );

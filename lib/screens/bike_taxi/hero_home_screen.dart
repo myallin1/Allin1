@@ -8,8 +8,8 @@ import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart' hide Transaction;
 import 'package:firebase_database/firebase_database.dart' as rtdb show Transaction;
+import 'package:firebase_database/firebase_database.dart' hide Transaction;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -23,33 +23,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_navigator.dart';
 import '../../config/city_config.dart';
+import '../../config/hero_service_access.dart';
+import '../../config/hero_skill_catalog.dart';
 import '../../models/ride_model.dart';
 import '../../models/service_request_model.dart';
 import '../../services/app_update_checker.dart';
-import '../../services/chitti/chitti_host_bridge.dart';
-import '../../services/db_usage_tracker.dart';
-import '../../services/hero_foreground_service.dart';
-import '../../services/hero_ride_notification_service.dart';
-import '../../services/hero_usage_accumulator_service.dart';
-import '../../services/hero_wallet_service.dart';
-import '../../services/hero_web_audio_service.dart';
-import '../../services/daily_quote_service.dart';
-import '../../services/localization_service.dart';
-import '../../services/location_service.dart';
-import '../../services/service_request_service.dart';
-import '../../services/sos_dispatch_service.dart';
-import '../../services/update_service.dart';
-import '../../utils/daily_boost_messages.dart';
-import '../../widgets/stranded_orders_banner.dart';
-import '../../widgets/allin1_map_widget.dart';
-import '../../widgets/hero_premium_loader.dart';
-import '../../widgets/order_photo_gallery.dart';
-import '../earn/rewards_hub_screen.dart';
-import '../../widgets/economic_vision_banner.dart';
-import '../notifications_screen.dart';
-import 'hero_ride_screen.dart';
-import '../../config/hero_service_access.dart';
-import '../../config/hero_skill_catalog.dart';
 // RELATIVE, not package: (Aug 19 2026).
 //
 // These were the ONLY three `package:erode_superapp/` imports in this
@@ -65,10 +43,32 @@ import '../../config/hero_skill_catalog.dart';
 // Restarting the analysis server clears it, but only until next time.
 // Matching the file's existing convention removes the failure mode.
 import '../../services/app_update_gate_service.dart';
+import '../../services/chitti/chitti_host_bridge.dart';
+import '../../services/daily_quote_service.dart';
+import '../../services/db_usage_tracker.dart';
+import '../../services/firestore_usage_tracking.dart';
+import '../../services/hero_foreground_service.dart';
+import '../../services/hero_ride_notification_service.dart';
+import '../../services/hero_usage_accumulator_service.dart';
+import '../../services/hero_wallet_service.dart';
+import '../../services/hero_web_audio_service.dart';
+import '../../services/localization_service.dart';
+import '../../services/location_service.dart';
 import '../../services/pwa_cache_platform_stub.dart'
     if (dart.library.html) '../../services/pwa_cache_platform_web.dart';
+import '../../services/service_request_service.dart';
+import '../../services/sos_dispatch_service.dart';
+import '../../services/update_service.dart';
+import '../../utils/daily_boost_messages.dart';
+import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/cached_tile_provider.dart';
-import '../../services/firestore_usage_tracking.dart';
+import '../../widgets/economic_vision_banner.dart';
+import '../../widgets/hero_premium_loader.dart';
+import '../../widgets/order_photo_gallery.dart';
+import '../../widgets/stranded_orders_banner.dart';
+import '../earn/rewards_hub_screen.dart';
+import '../notifications_screen.dart';
+import 'hero_ride_screen.dart';
 
 class HeroHomeScreen extends StatefulWidget {
   const HeroHomeScreen({
@@ -127,7 +127,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
   bool _accepting = false;
   bool _isBootstrappingHeroData = true;
   String _activeRideId = '';
-  int _mapRefreshGen = 0;
+  final int _mapRefreshGen = 0;
   bool _isShowingRideDialog = false;
   bool _showServiceZone = false;
   bool _isShowingServiceDialog = false;
@@ -788,13 +788,14 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               'completed',
             ],
           )
+          .limit(20)
           .trackedSnapshots();
       // DB usage monitor — side-channel .listen() on this already-hoisted,
       // broadcast .snapshots() stream to count docs per snapshot; the
       // stream already has _serviceRequestBusySub as a listener below, so
       // this adds no extra Firestore reads. See db_usage_tracker.dart.
       _activeServiceRequestsStream!.listen((s) => DbUsageTracker.instance
-          .recordRead(s.docs.length, 'hero_active_service_requests'));
+          .recordRead(s.docs.length, 'hero_active_service_requests'),);
       _serviceRequestBusySub = _activeServiceRequestsStream!.listen((snap) {
         // FIX (CTO mandate — Final UI Migration Sweep): map to typed
         // models here so both this busy-gate check and the GPS-tracking
@@ -828,7 +829,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             m.status != 'completed' &&
             DateTime.now()
                     .difference(m.updatedAt ?? m.createdAt ?? DateTime.now())
-                <= _staleRideWindow);
+                <= _staleRideWindow,);
         final hasActive = activeDocs.isNotEmpty;
         if (mounted && hasActive != _hasActiveServiceRequest) {
           setState(() => _hasActiveServiceRequest = hasActive);
@@ -878,7 +879,8 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           SosAlertStatus.active,
           SosAlertStatus.claimed,
           SosAlertStatus.escalated,
-        ])
+        ],)
+        .limit(10)
         .trackedSnapshots();
     _pulseCtrl = AnimationController(
       vsync: this,
@@ -1075,7 +1077,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               : kDefaultCity;
           _serviceAccess = data[kHeroServiceAccessField] is Map
               ? Map<String, dynamic>.from(
-                  data[kHeroServiceAccessField] as Map)
+                  data[kHeroServiceAccessField] as Map,)
               : null;
           _heroSkills = heroSkillsOf(data);
           _isOnline = restoredOnline;
@@ -1392,7 +1394,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                 })
                 .catchError((Object e) {
               debugPrint('[HeroHomeScreen] onDisconnect() registration failed: $e');
-            }));
+            }),);
             _lastUploadedPosition = currentPos;
             debugPrint(
               '🔥 [ONLINE] Wrote hero position to RTDB '
@@ -1503,7 +1505,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                 heroId: _user!.uid,
                 startedAt: trueSessionStart,
                 durationMinutes: durationMinutes,
-              ));
+              ),);
             }
           }
         }
@@ -1614,7 +1616,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       );
     }, onError: (Object e) {
       debugPrint('[HeroHomeScreen] .info/connected listener error: $e');
-    });
+    },);
   }
 
   void _stopPresenceConnectionWatcher() {
@@ -1737,7 +1739,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
             })
             .catchError((Object e) {
           debugPrint('[HeroHomeScreen] onDisconnect() re-registration failed: $e');
-        }));
+        }),);
 
         // Firestore: SKIPPED in timer — status writes are handled by
         // _syncOnlineStatus with its own 3-minute gate.
@@ -1812,7 +1814,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
       }
     }, onError: (Object e) {
       debugPrint('[HeroHome] serviceAccess watcher error: $e');
-    });
+    },);
   }
 
   // ================================================================
@@ -1860,7 +1862,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           Row(
             children: [
               const Icon(Icons.system_update_rounded,
-                  color: Color(0xFF6C63FF), size: 20),
+                  color: Color(0xFF6C63FF), size: 20,),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1877,7 +1879,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
           if (notes.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(notes,
-                style: GoogleFonts.outfit(fontSize: 12, height: 1.4)),
+                style: GoogleFonts.outfit(fontSize: 12, height: 1.4),),
           ],
           const SizedBox(height: 4),
           Text(
@@ -1893,13 +1895,13 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
               onPressed: _runHeroUpdate,
               icon: const Icon(Icons.download_rounded, size: 17),
               label: Text('Update now',
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.w800)),
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w800),),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF6C63FF),
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(11)),
+                    borderRadius: BorderRadius.circular(11),),
               ),
             ),
           ),
@@ -2805,7 +2807,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
 
     final requestType = data['requestType'] as String? ?? 'hero_booking';
     final customerName = data['customerName'] as String? ?? 'Customer';
-    final details = data['details'] as Map? ?? {};
+    final details = (data['details'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
     final summary = _serviceRequestSummary(requestType, details);
 
     // Hygiene: clear any earlier quiet background notification for this
@@ -2977,7 +2979,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
     });
     } catch (e, st) {
       debugPrint('[HeroHomeScreen] Service dialog showDialog() threw synchronously: $e\n$st');
-      staleSub?.cancel();
+      staleSub.cancel();
       if (mounted) setState(() => _isShowingServiceDialog = false);
       return;
     }
@@ -4144,7 +4146,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                     const SizedBox(height: 10),
                     Text(
                       isMine
-                          ? 'Call ${customerName?.isNotEmpty == true ? customerName : 'the customer'} to check what happened.'
+                          ? 'Call ${customerName?.isNotEmpty ?? false ? customerName : 'the customer'} to check what happened.'
                           : (escalatedCount > 0
                               ? "Previous responder couldn't reach them — please help."
                               : 'A user needs immediate help!'),
@@ -4242,7 +4244,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
                               child: Text(
-                                "No problem —\nclose",
+                                'No problem —\nclose',
                                 textAlign: TextAlign.center,
                                 style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
                               ),
@@ -6069,7 +6071,7 @@ class _HeroHomeScreenState extends State<HeroHomeScreen>
                 color: _muted.withValues(alpha: 0.10),
                 border: Border.all(color: _muted.withValues(alpha: 0.28), width: 2),
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.wifi_tethering_off_rounded,
                 size: 44,
                 color: _muted,
@@ -6901,7 +6903,7 @@ Future<double?> _promptForAmount(
           TextField(
             controller: controller,
             autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(),
+            keyboardType: TextInputType.number,
             decoration: const InputDecoration(
               prefixText: '₹ ',
               border: OutlineInputBorder(),

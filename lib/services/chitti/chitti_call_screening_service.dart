@@ -1,14 +1,16 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+
+import '../guru_admin_api_service.dart';
 import 'chitti_accessibility_bridge.dart';
 import 'chitti_summarizer.dart';
 import 'chitti_voice_service.dart';
-import '../guru_admin_api_service.dart';
 
 class ChittiCallScreeningService {
   ChittiCallScreeningService._();
@@ -245,9 +247,9 @@ class ChittiCallScreeningService {
     await Future.delayed(const Duration(milliseconds: 1500));
 
     final greeting = _languageCode == 'ta'
-        ? "வணக்கம், பாஸ் பிஸியா இருக்காரு. நான் அவரோட அசிஸ்டெண்ட் சிட்டி பேசுறேன். இந்த அழைப்பு பதிவு செய்யப்படுகிறது. உங்களுக்கு என்ன வேணும்னு சொல்லுங்க பாஸ்."
-        : "Hello, Nizam is busy right now. This is Chitti, his assistant. "
-            "This call is being recorded. Please tell me what you need.";
+        ? 'வணக்கம், பாஸ் பிஸியா இருக்காரு. நான் அவரோட அசிஸ்டெண்ட் சிட்டி பேசுறேன். இந்த அழைப்பு பதிவு செய்யப்படுகிறது. உங்களுக்கு என்ன வேணும்னு சொல்லுங்க பாஸ்.'
+        : 'Hello, Nizam is busy right now. This is Chitti, his assistant. '
+            'This call is being recorded. Please tell me what you need.';
     _conversation.add('Assistant: $greeting');
     await _speak(greeting);
 
@@ -289,14 +291,14 @@ class ChittiCallScreeningService {
     } catch (_) {}
     final greeting = customGreeting ??
         (_languageCode == 'ta'
-            ? "வணக்கம், இது NJ Tech, Erode. பாஸ் நிஜாம் இப்போ பிஸியா இருக்காரு, "
-                "உங்க கால் கனெக்ட் பண்ண முடியாம இருக்கு. பீப் சத்தத்துக்கு அப்புறம், "
-                "உங்க பெயர், தேவை, தொடர்பு விவரம் தெளிவா சொல்லுங்க — இது ரெக்கார்ட் "
-                "ஆகி பாஸ்கிட்ட நேரடியா போகும்."
-            : "Hello, this is NJ Tech, Erode. Nizam is busy right now and "
+            ? 'வணக்கம், இது NJ Tech, Erode. பாஸ் நிஜாம் இப்போ பிஸியா இருக்காரு, '
+                'உங்க கால் கனெக்ட் பண்ண முடியாம இருக்கு. பீப் சத்தத்துக்கு அப்புறம், '
+                'உங்க பெயர், தேவை, தொடர்பு விவரம் தெளிவா சொல்லுங்க — இது ரெக்கார்ட் '
+                'ஆகி பாஸ்கிட்ட நேரடியா போகும்.'
+            : 'Hello, this is NJ Tech, Erode. Nizam is busy right now and '
                 "couldn't take this call. After the beep, please clearly say "
-                "your name, what you need, and how to reach you — this is "
-                "being recorded and will go straight to Nizam.");
+                'your name, what you need, and how to reach you — this is '
+                'being recorded and will go straight to Nizam.');
     _conversation.add('Assistant: $greeting');
     await _speak(greeting);
     await ChittiAccessibilityBridge.instance.playCallBeep();
@@ -383,7 +385,7 @@ class ChittiCallScreeningService {
     }
   }
 
-  void _listenLoop() async {
+  Future<void> _listenLoop() async {
     if (!_isScreening || _pausedForManualRecording) return;
 
     try {
@@ -448,8 +450,8 @@ class ChittiCallScreeningService {
     } catch (_) {}
 
     final closing = _languageCode == 'ta'
-        ? "மன்னிக்கணும் பாஸ், உங்க குரல் இங்க சரியா கேட்கல. உங்க நம்பர் பாஸ்கிட்ட "
-            "போயிடுச்சு, அவரு உங்களை உடனே கூப்பிடுவாரு. நன்றி!"
+        ? 'மன்னிக்கணும் பாஸ், உங்க குரல் இங்க சரியா கேட்கல. உங்க நம்பர் பாஸ்கிட்ட '
+            'போயிடுச்சு, அவரு உங்களை உடனே கூப்பிடுவாரு. நன்றி!'
         : "Sorry, I couldn't hear you clearly. Your number has reached "
             "Nizam and he'll call you right back. Thank you!";
     _conversation.add('Assistant: $closing');
@@ -468,7 +470,7 @@ class ChittiCallScreeningService {
     if (_turnCount >= _maxTurns) {
       await _log('[ChittiCallScreeningService] Reached max turns ($_maxTurns). Terminating gracefully.');
       final closing = _languageCode == 'ta'
-          ? "சரிங்க பாஸ், உங்களோட செய்தியை நான் சேவ் பண்ணிட்டேன். பாஸ் உங்களை கூப்பிடுவாரு. நன்றி!"
+          ? 'சரிங்க பாஸ், உங்களோட செய்தியை நான் சேவ் பண்ணிட்டேன். பாஸ் உங்களை கூப்பிடுவாரு. நன்றி!'
           : "Alright, I've saved your message. Nizam will call you back. Thank you!";
       _conversation.add('Assistant: $closing');
       await _speak(closing);
@@ -487,8 +489,8 @@ class ChittiCallScreeningService {
                   : 'English';
       final prompt = "You are Chitti, Nizam's AI call assistant. "
           "The caller says: '$message'. "
-          "Reply in one warm, natural, human-like $languageInstruction sentence saying Nizam is busy, "
-          "and ask if they want to leave a message or book an appointment.";
+          'Reply in one warm, natural, human-like $languageInstruction sentence saying Nizam is busy, '
+          'and ask if they want to leave a message or book an appointment.';
 
       var reply = await _api.sendMessage(message: prompt);
       if (!_isScreening) return;
@@ -506,7 +508,7 @@ class ChittiCallScreeningService {
         await _log('[ChittiCallScreeningService] AI reply looked like a system/config '
             'error — substituting the natural fallback. Raw was: $reply');
         reply = _languageCode == 'ta'
-            ? "சரிங்க பாஸ், உங்க செய்தியை நான் குறித்துக்கொண்டேன். பாஸ் உங்களை உடனே தொடர்புகொள்வார்."
+            ? 'சரிங்க பாஸ், உங்க செய்தியை நான் குறித்துக்கொண்டேன். பாஸ் உங்களை உடனே தொடர்புகொள்வார்.'
             : "Alright, I've noted down your message. Nizam will call you back soon.";
       }
       await _log('[ChittiCallScreeningService] Chitti reply: $reply');
@@ -516,7 +518,7 @@ class ChittiCallScreeningService {
     } catch (e) {
       if (!_isScreening) return;
       final fallbackReply = _languageCode == 'ta'
-          ? "சரிங்க பாஸ், உங்க செய்தியை நான் சேவ் பண்ணிக்கிறேன். பாஸ் உங்ககிட்ட பேசுவார்."
+          ? 'சரிங்க பாஸ், உங்க செய்தியை நான் சேவ் பண்ணிக்கிறேன். பாஸ் உங்ககிட்ட பேசுவார்.'
           : "Alright, I'll save your message. Nizam will get back to you.";
       _conversation.add('Assistant: $fallbackReply');
       await _speak(fallbackReply);

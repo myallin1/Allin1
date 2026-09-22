@@ -11,8 +11,8 @@
 // That is invisible to a compiler and invisible to a smoke test; it
 // only shows up as an owner asking "how many are waiting?" and being
 // told nothing. So the parity itself is the assertion.
-import 'package:flutter_test/flutter_test.dart';
 import 'package:erode_superapp/services/chitti/chitti_tool_registry.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('every variant has real reads, not just plumbing', () {

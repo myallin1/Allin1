@@ -12,6 +12,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/city_config.dart';
+import '../../config/hero_service_access.dart';
 import '../../models/ride_model.dart';
 // Phone lookups consolidated here (Aug 11 2026) — single source of truth.
 import '../../services/auth_service.dart';
@@ -21,7 +22,6 @@ import '../../widgets/allin1_map_widget.dart';
 import '../../widgets/cancellation_reason_sheet.dart';
 import '../../widgets/chitti_processing_steps.dart';
 import 'ride_tracking_screen.dart';
-import '../../config/hero_service_access.dart';
 
 class RideSearchScreen extends StatefulWidget {
   final RideModel ride;
@@ -298,7 +298,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
     try {
       final pickupLat = widget.ride.pickupLatitude ?? 11.3410;
       final pickupLng = widget.ride.pickupLongitude ?? 77.7172;
-      print('[RideSearch] _fetchNearbyHeroes: pickup=$pickupLat,$pickupLng');
+      debugPrint('[RideSearch] _fetchNearbyHeroes: pickup=$pickupLat,$pickupLng');
 
       // Multi-city (Plan 3): the 3km bounding box below already makes
       // cross-city matches practically impossible today (cities are far
@@ -314,12 +314,12 @@ class _RideSearchScreenState extends State<RideSearchScreen>
 
       final onlineData = onlineSnap.snapshot.value as Map<dynamic, dynamic>?;
       if (onlineData == null || onlineData.isEmpty) {
-        print('[RideSearch] No online heroes found in RTDB');
+        debugPrint('[RideSearch] No online heroes found in RTDB');
         _heroesQueue = [];
         return;
       }
 
-      print('[RideSearch] RTDB returned ${onlineData.length} online hero entries');
+      debugPrint('[RideSearch] RTDB returned ${onlineData.length} online hero entries');
 
       // TASK 2 (broadcast dispatch, Aug 8 2026): widened 3km -> 5km per
       // "fastest finger first" redesign — more heroes candidates now get
@@ -482,7 +482,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         }
 
         final distance = _haversineDistance(pickupLocation, LatLng(heroLat, heroLng));
-        print('[RideSearch] Hero $heroId: distance=${distance.toStringAsFixed(2)}km');
+        debugPrint('[RideSearch] Hero $heroId: distance=${distance.toStringAsFixed(2)}km');
         validHeroes.add({
           'id': heroId,
           'distance': distance,
@@ -492,7 +492,7 @@ class _RideSearchScreenState extends State<RideSearchScreen>
         });
       }
 
-      print('[RideSearch] _fetchNearbyHeroes: sorted queue has ${validHeroes.length} heroes');
+      debugPrint('[RideSearch] _fetchNearbyHeroes: sorted queue has ${validHeroes.length} heroes');
       validHeroes.sort((a, b) => (a['distance'] as num).compareTo(b['distance'] as num));
       _heroesQueue = validHeroes;
       debugPrint('[RideSearch] Found ${validHeroes.length} heroes within 3km');

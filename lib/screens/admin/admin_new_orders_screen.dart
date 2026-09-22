@@ -17,11 +17,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/service_request_model.dart';
 import '../../services/admin_deletion_service.dart';
+import '../../services/firestore_usage_tracking.dart';
 import '../../services/service_request_service.dart';
 import '../../services/service_requests_listener.dart';
 import '../../widgets/admin/admin_selection_mixin.dart';
 import '../../widgets/order_photo_gallery.dart';
-import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -77,7 +77,7 @@ String? _itemsListSummary(Map<String, dynamic> details) {
             // so this one summary helper works for every requestType.
             (it['qty'] ?? it['quantity'] ?? '').toString().trim(),
             (it['name'] ?? '').toString().trim(),
-          ].where((s) => s.isNotEmpty).join(' '))
+          ].where((s) => s.isNotEmpty).join(' '),)
       .where((s) => s.isNotEmpty)
       .join(', ');
   return joined;
@@ -673,7 +673,7 @@ class AssignHeroSheetState extends State<AssignHeroSheet> {
           const SizedBox(height: 12),
           TextField(
             controller: _estimateCtrl,
-            keyboardType: const TextInputType.numberWithOptions(),
+            keyboardType: TextInputType.number,
             style: const TextStyle(color: _text),
             decoration: const InputDecoration(
               labelText: 'Estimated amount (optional)',

@@ -38,6 +38,7 @@ import '../../services/mobile_catalog_service.dart';
 import 'mobile_listings_tab.dart';
 import 'mobile_service_tab.dart';
 import 'mobile_status_tab.dart';
+import 'signature_mobiles_screen.dart';
 
 // Theme — same palette as nj_tech_store_screen.dart so the hub reads as
 // part of the same app rather than a bolted-on section.
@@ -167,7 +168,7 @@ class _MobileHubScreenState extends State<MobileHubScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(icon,
-                          color: active ? kMobPink : kMobMuted, size: 24),
+                          color: active ? kMobPink : kMobMuted, size: 24,),
                       const SizedBox(height: 3),
                       Text(
                         label,
@@ -204,9 +205,7 @@ class MobileHubHeader extends StatelessWidget {
   final Widget? trailing;
 
   const MobileHubHeader({
-    super.key,
-    required this.title,
-    required this.subtitle,
+    required this.title, required this.subtitle, super.key,
     this.trailing,
   });
 
@@ -253,7 +252,34 @@ class MobileHubHeader extends StatelessWidget {
                 ],
               ),
             ),
-            if (trailing != null) trailing!,
+            if (trailing != null)
+              trailing!
+            else
+              TextButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SignatureMobilesScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.stars_rounded, color: Color(0xFFFFD600), size: 16),
+                label: Text(
+                  'Signature',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF4FA3).withValues(alpha: 0.3),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: const BorderSide(color: Color(0xFFFF4FA3)),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
           ],
         ),
       ),
@@ -269,7 +295,7 @@ class MobilePhotoFallback extends StatelessWidget {
   final String brand;
   final double size;
 
-  const MobilePhotoFallback({super.key, required this.brand, this.size = 64});
+  const MobilePhotoFallback({required this.brand, super.key, this.size = 64});
 
   @override
   Widget build(BuildContext context) {

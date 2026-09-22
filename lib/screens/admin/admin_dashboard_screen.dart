@@ -29,6 +29,7 @@ import 'admin_detailed_reports_screen.dart';
 import 'admin_hero_dispatch_screen.dart';
 import 'admin_hero_earnings_screen.dart';
 import 'admin_new_orders_screen.dart';
+import 'admin_partner_agreement_screen.dart';
 import 'admin_ride_tracking_screen.dart';
 import 'admin_seller_approval_screen.dart';
 import 'ads_management_screen.dart';
@@ -856,18 +857,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         const NativeUpdateButton(appVariant: 'admin'),
         IconButton(
           icon: const Icon(Icons.map_rounded, color: Color(0xFFFF4FA3), size: 22),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminHeroDispatchScreen()),
-          ),
+          onPressed: () => _navigate(const AdminHeroDispatchScreen()),
           tooltip: 'Dispatch Heroes',
         ),
         IconButton(
           icon: const Icon(Icons.timeline_rounded, color: Color(0xFFFF4FA3), size: 22),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminRideTrackingScreen()),
-          ),
+          onPressed: () => _navigate(const AdminRideTrackingScreen()),
           tooltip: 'Track Active Rides',
         ),
         Stack(
@@ -2039,6 +2034,19 @@ class _MoreSheet extends StatelessWidget {
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const ChittiEnquiriesScreen()));
+                    },
+                  ),
+                ),
+                AdminHomeTile(
+                  id: 'partner_onboarding',
+                  child: _sheetTile(
+                    context,
+                    icon: Icons.handshake_outlined,
+                    iconColor: _green,
+                    label: 'Partner Shop Onboarding',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const AdminPartnerAgreementScreen()));
                     },
                   ),
                 ),

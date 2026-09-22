@@ -122,7 +122,7 @@ class _AdminInCallScreenState extends State<AdminInCallScreen> {
     // WhatsApp needs a country-coded number with no punctuation. Indian
     // local numbers are the common case here, so a bare 10-digit number
     // gets +91 rather than silently failing to open a chat.
-    var digits = _number.replaceAll(RegExp(r'[^0-9]'), '');
+    var digits = _number.replaceAll(RegExp('[^0-9]'), '');
     if (digits.length == 10) digits = '91$digits';
     if (digits.isEmpty) {
       _snack('No number available for this call');
@@ -232,7 +232,7 @@ class _AdminInCallScreenState extends State<AdminInCallScreen> {
                                 builder: (dialogContext) => AlertDialog(
                                   backgroundColor: const Color(0xFF141420),
                                   title: const Text('Chitti is talking to this caller',
-                                      style: TextStyle(color: _text)),
+                                      style: TextStyle(color: _text),),
                                   content: const Text(
                                     'Chitti is currently listening to this customer. '
                                     'Starting manual recording will pause Chitti — it '
@@ -258,7 +258,7 @@ class _AdminInCallScreenState extends State<AdminInCallScreen> {
                               ChittiCallScreeningService.instance.pauseForManualRecording();
                             }
                             final now = await ChittiAccessibilityBridge.instance
-                                .setCallRecording(turningOn);
+                                .setCallRecording(enabled: turningOn);
                             if (!mounted) return;
                             setState(() => _recording = now);
                             if (turningOn && !now) {

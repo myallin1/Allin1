@@ -224,7 +224,7 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
     // under a BackdropFilter — the blur sampling has nothing to draw
     // over, so the iframe (and anything on it, like the play button)
     // simply fails to render. Same visual weight (black scrim), no blur.
-    return Container(
+    return ColoredBox(
       color: Colors.black.withValues(alpha: 0.6),
       child: SafeArea(
         top: false,
@@ -256,7 +256,7 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
               // top corners, and only the info card beneath it is
               // rounded. Slightly different corners, a video that
               // actually appears.
-              Container(
+              ColoredBox(
                 color: context.premium.card,
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
@@ -265,7 +265,6 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                     children: [
                       YoutubePlayer(
                         controller: _controller,
-                        aspectRatio: 16 / 9,
                       ),
                       // POSTER. Covers the player until a real frame is
                       // playing, so the wait reads as "loading" rather
@@ -303,7 +302,7 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                 borderRadius: const BorderRadius.vertical(
                   bottom: Radius.circular(kRadiusLg),
                 ),
-                child: Container(
+                child: ColoredBox(
                   color: context.premium.card,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -329,7 +328,7 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                                       widget.subtitle!,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: premiumBody(context, size: 12),
+                                      style: premiumBody(context),
                                     ),
                                   ],
                                 ],
@@ -357,7 +356,7 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(Icons.fullscreen_rounded,
-                                    size: 18, color: context.premium.ink),
+                                    size: 18, color: context.premium.ink,),
                               ),
                             ),
                             const SizedBox(width: 4),
@@ -371,7 +370,7 @@ class _PremiumVideoSheetState extends State<_PremiumVideoSheet> {
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(Icons.close_rounded,
-                                    size: 18, color: context.premium.ink),
+                                    size: 18, color: context.premium.ink,),
                               ),
                             ),
                           ],
@@ -397,7 +396,7 @@ class VideoThumbnail extends StatelessWidget {
   final String videoId;
   final BoxFit fit;
 
-  const VideoThumbnail({super.key, required this.videoId, this.fit = BoxFit.cover});
+  const VideoThumbnail({required this.videoId, super.key, this.fit = BoxFit.cover});
 
   @override
   Widget build(BuildContext context) {
@@ -408,7 +407,7 @@ class VideoThumbnail extends StatelessWidget {
         color: context.premium.hairline,
         alignment: Alignment.center,
         child: Icon(Icons.videocam_off_rounded,
-            color: context.premium.muted, size: 30),
+            color: context.premium.muted, size: 30,),
       ),
       loadingBuilder: (context, child, progress) =>
           progress == null ? child : Container(color: context.premium.hairline),
@@ -422,7 +421,7 @@ class ListingVideoPlayer extends StatefulWidget {
   /// widget takes the id directly so it can never render a dead frame.
   final String videoId;
 
-  const ListingVideoPlayer({super.key, required this.videoId});
+  const ListingVideoPlayer({required this.videoId, super.key});
 
   @override
   State<ListingVideoPlayer> createState() => _ListingVideoPlayerState();
@@ -437,7 +436,6 @@ class _ListingVideoPlayerState extends State<ListingVideoPlayer> {
       videoId: widget.videoId,
       autoPlay: true,
       params: const YoutubePlayerParams(
-        showControls: true,
         showFullscreenButton: true,
         // Keep related videos scoped to this channel where possible —
         // we don't want the player suggesting a competitor's shop at
@@ -466,7 +464,7 @@ class _ListingVideoPlayerState extends State<ListingVideoPlayer> {
         aspectRatio: 16 / 9,
         child: controller == null
             ? _buildThumbnail()
-            : YoutubePlayer(controller: controller, aspectRatio: 16 / 9),
+            : YoutubePlayer(controller: controller),
       ),
     );
   }
@@ -488,7 +486,7 @@ class _ListingVideoPlayerState extends State<ListingVideoPlayer> {
               color: Colors.black87,
               alignment: Alignment.center,
               child: const Icon(Icons.videocam_off_rounded,
-                  color: Colors.white38, size: 34),
+                  color: Colors.white38, size: 34,),
             ),
             loadingBuilder: (context, child, progress) {
               if (progress == null) return child;
@@ -506,7 +504,7 @@ class _ListingVideoPlayerState extends State<ListingVideoPlayer> {
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.play_arrow_rounded,
-                  color: Colors.white, size: 34),
+                  color: Colors.white, size: 34,),
             ),
           ),
           Positioned(
@@ -534,4 +532,3 @@ class _ListingVideoPlayerState extends State<ListingVideoPlayer> {
     );
   }
 }
-

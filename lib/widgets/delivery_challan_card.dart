@@ -24,8 +24,7 @@ import 'tracking_timeline.dart';
 // instead of map['key'] lookups.
 class DeliveryChallanCard extends StatelessWidget {
   const DeliveryChallanCard({
-    super.key,
-    required this.request,
+    required this.request, super.key,
   });
 
   final ServiceRequestModel request;

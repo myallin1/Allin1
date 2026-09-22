@@ -159,9 +159,7 @@ class SemanticButton extends StatelessWidget {
     HapticFeedback.lightImpact();
 
     // Call the tap callback
-    if (onTap != null) {
-      onTap!();
-    }
+    onTap?.call();
   }
 
   @override

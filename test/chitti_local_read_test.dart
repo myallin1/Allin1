@@ -11,9 +11,8 @@
 // what is pinned here is the wallet's dirty-flag state machine, which
 // is where a mistake is silent: a stale balance that looks
 // authoritative, or a server read on every glance.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/services/chitti/chitti_local_read.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   setUp(ChittiLocalRead.resetForTesting);

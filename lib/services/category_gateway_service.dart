@@ -152,14 +152,14 @@ class CategoryGatewayService {
   ///
   /// Recurses into nested maps/lists: a menu item's `variants` list
   /// holds maps, and a future field could nest deeper still.
-  static dynamic _hiveSafeValue(dynamic v) {
+  static dynamic _hiveSafeValue(v) {
     if (v is Timestamp) return v.toDate().toIso8601String();
     if (v is DateTime) return v.toIso8601String();
     if (v is GeoPoint) return {'lat': v.latitude, 'lng': v.longitude};
     if (v is DocumentReference) return v.path;
     if (v is Map) {
       return v.map<String, dynamic>(
-          (k, val) => MapEntry(k.toString(), _hiveSafeValue(val)));
+          (k, val) => MapEntry(k.toString(), _hiveSafeValue(val)),);
     }
     if (v is List) return v.map(_hiveSafeValue).toList();
     return v;
@@ -170,7 +170,7 @@ class CategoryGatewayService {
   ) =>
       rows
           .map((r) => Map<String, dynamic>.from(
-              _hiveSafeValue(r) as Map<String, dynamic>))
+              _hiveSafeValue(r) as Map<String, dynamic>,),)
           .toList();
 
   Future<List<Map<String, dynamic>>> loadSellerProducts(

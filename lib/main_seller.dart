@@ -21,18 +21,19 @@ import 'screens/seller_dashboard_screen.dart';
 import 'screens/seller_home_kitchen_menu_screen.dart';
 import 'screens/seller_onboarding_screen.dart';
 import 'screens/seller_screen.dart';
-import 'services/db_usage_tracker.dart';
 import 'services/ai_activation_service.dart';
+import 'services/app_error_log_service.dart';
+import 'services/chitti/chitti_screen_tracker.dart';
+import 'services/db_usage_tracker.dart';
+import 'services/guru_overlay_service.dart';
 import 'services/localization_service.dart';
 import 'services/migration_gate_service.dart';
+import 'services/seller_alert_notification_service.dart';
+import 'services/seller_foreground_service.dart';
 import 'services/session_service.dart';
 import 'services/theme_service.dart';
-import 'services/seller_foreground_service.dart';
-import 'services/seller_alert_notification_service.dart';
 import 'widgets/branded_loading_screen.dart';
 import 'widgets/migration_notice_overlay.dart';
-import 'services/guru_overlay_service.dart';
-import 'services/chitti/chitti_screen_tracker.dart';
 
 // NEW (Issue 2 fix — "seller app not receiving any order notification").
 // Zero-cost infra constraint: no Cloud Functions / Blaze plan, so this is
@@ -117,7 +118,7 @@ void _initSellerPingListener() {
       await nodeRef.remove();
     }, onError: (Object e) {
       debugPrint('[SellerPing] RTDB listener error: $e');
-    });
+    },);
   });
 }
 
@@ -244,6 +245,42 @@ void main() async {
       options.debug = false;
     },
     appRunner: () async {
+      final prevSellerFlutterOnError = FlutterError.onError;
+      FlutterError.onError = (details) {
+        debugPrint('[main_seller] Flutter error: ${details.exceptionAsString()}');
+        AppErrorLogService.recordFlutterError(details, appVariant: 'seller');
+        prevSellerFlutterOnError?.call(details);
+      };
+
+      final prevSellerPlatformOnError = PlatformDispatcher.instance.onError;
+      PlatformDispatcher.instance.onError = (error, stack) {
+        debugPrint('[main_seller] PlatformDispatcher error: $error');
+        AppErrorLogService.recordPlatformError(
+          error,
+          stack,
+          appVariant: 'seller',
+        );
+        try {
+          prevSellerPlatformOnError?.call(error, stack);
+        } catch (_) {}
+        return true;
+      };
+
+      ErrorWidget.builder = (details) {
+        return const Material(
+          color: Colors.transparent,
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Text(
+                'Temporarily unavailable',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+          ),
+        );
+      };
+
       // videoDone completes when app_splash.mp4 finishes playing; the
       // second runApp() below (SellerApp) awaits it so the video is never
       // cut short by a fast Firebase init.
@@ -263,7 +300,7 @@ void main() async {
       if (!hasSeenSplashVideoEver) {
         runApp(_BootLoadingApp(onVideoFinished: () {
           if (!videoDone.isCompleted) videoDone.complete();
-        }));
+        },),);
       } else {
         videoDone.complete();
       }
@@ -479,7 +516,7 @@ class SellerApp extends StatelessWidget {
               // seller_onboarding_screen.dart for the same change.
               return MaterialPageRoute(
                 builder: (_) => SellerHomeKitchenMenuScreen(
-                    sellerId: sellerId, title: 'My Menu', categoryName: 'Menu'),
+                    sellerId: sellerId, title: 'My Menu', categoryName: 'Menu',),
               );
             }
             return null;

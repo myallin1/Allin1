@@ -20,6 +20,7 @@ import 'package:url_launcher/url_launcher.dart';
 // GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
 import '../services/auth_prompt_service.dart';
 import '../services/auth_service.dart';
+import '../services/firestore_usage_tracking.dart';
 import '../services/service_request_cache_service.dart';
 import '../services/service_request_service.dart';
 import '../services/theme_service.dart';
@@ -28,7 +29,6 @@ import '../widgets/cached_cloud_image.dart';
 import '../widgets/location_capture_field.dart';
 import 'hero_search_radar_screen.dart';
 import 'service_request_tracking_screen.dart';
-import '../services/firestore_usage_tracking.dart';
 
 // ── Brand Colors (matches dashboard theme) ───────────────────────
 const Color _kPink = Color(0xFFFF4FA3);
@@ -129,7 +129,7 @@ const Map<String, String> _kElectronicsPhotoUrl = {
 };
 
 Widget _themedCategoryIcon(
-    BuildContext context, _ServiceCategory cat, double size, Widget fallback) {
+    BuildContext context, _ServiceCategory cat, double size, Widget fallback,) {
   final iconTheme = context.watch<ThemeService>().iconThemeKey;
   final photoUrl = _kElectronicsPhotoUrl[cat.id];
   if (iconTheme == 'photo_realistic' && photoUrl != null) {
@@ -147,7 +147,7 @@ Widget _themedCategoryIcon(
           BoxShadow(
               color: Colors.black.withValues(alpha: 0.18),
               blurRadius: 6,
-              offset: const Offset(0, 3)),
+              offset: const Offset(0, 3),),
         ],
       ),
       child: ClipRRect(
@@ -156,7 +156,6 @@ Widget _themedCategoryIcon(
           photoUrl,
           width: size,
           height: size,
-          fit: BoxFit.cover,
           cacheWidth: (size * 4).round(),
           errorWidget: fallback,
         ),
@@ -911,7 +910,7 @@ class _CategoryTileState extends State<_CategoryTile>
                         32,
                         cat.emoji != null
                             ? SvgPicture.string(cat.emoji!,
-                                width: 32, height: 32)
+                                width: 32, height: 32,)
                             : AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 500),
                                 transitionBuilder: (child, anim) =>
@@ -921,7 +920,7 @@ class _CategoryTileState extends State<_CategoryTile>
                                     curve: Curves.elasticOut,
                                   ),
                                   child: FadeTransition(
-                                      opacity: anim, child: child),
+                                      opacity: anim, child: child,),
                                 ),
                                 child: Icon(
                                   _currentIcon,
@@ -1165,9 +1164,9 @@ class _CategoryModalState extends State<_CategoryModal> {
                               28,
                               cat.emoji != null
                                   ? SvgPicture.string(cat.emoji!,
-                                      width: 28, height: 28)
+                                      width: 28, height: 28,)
                                   : Icon(cat.icon,
-                                      color: Colors.white, size: 28)),
+                                      color: Colors.white, size: 28,),),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -1308,9 +1307,9 @@ class _CategoryModalState extends State<_CategoryModal> {
                                     18,
                                     cat.emoji != null
                                         ? SvgPicture.string(cat.emoji!,
-                                            width: 18, height: 18)
+                                            width: 18, height: 18,)
                                         : Icon(cat.icon,
-                                            color: cat.color, size: 18)),
+                                            color: cat.color, size: 18,),),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Service: ${cat.title}',
@@ -1369,10 +1368,12 @@ class _CategoryModalState extends State<_CategoryModal> {
                             ],
                             validator: (v) {
                               final val = v?.trim() ?? '';
-                              if (val.isEmpty)
+                              if (val.isEmpty) {
                                 return 'Please enter phone number';
-                              if (val.length < 10)
+                              }
+                              if (val.length < 10) {
                                 return 'Enter valid 10-digit number';
+                              }
                               return null;
                             },
                           ),
@@ -1441,7 +1442,7 @@ class _CategoryModalState extends State<_CategoryModal> {
                               hintText:
                                   'Pickup / inspection address (optional)',
                               hintStyle: GoogleFonts.outfit(
-                                  color: _kMuted, fontSize: 13),
+                                  color: _kMuted, fontSize: 13,),
                               filled: true,
                               fillColor: _kSurface,
                               border: OutlineInputBorder(
@@ -1449,7 +1450,7 @@ class _CategoryModalState extends State<_CategoryModal> {
                                 borderSide: BorderSide.none,
                               ),
                               contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 14),
+                                  horizontal: 14, vertical: 14,),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -1604,15 +1605,15 @@ class _FormField extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(
-        DiagnosticsProperty<TextEditingController>('controller', controller));
+        DiagnosticsProperty<TextEditingController>('controller', controller),);
     properties.add(StringProperty('hint', hint));
     properties.add(DiagnosticsProperty<IconData>('icon', icon));
     properties
         .add(DiagnosticsProperty<TextInputType?>('keyboardType', keyboardType));
     properties.add(IterableProperty<TextInputFormatter>(
-        'inputFormatters', inputFormatters));
+        'inputFormatters', inputFormatters,),);
     properties.add(ObjectFlagProperty<String? Function(String?)?>.has(
-        'validator', validator));
+        'validator', validator,),);
   }
 }
 
@@ -1724,7 +1725,7 @@ class _EnquiryCardRouter extends StatefulWidget {
     super.debugFillProperties(properties);
     properties.add(
         DiagnosticsProperty<QueryDocumentSnapshot<Map<String, dynamic>>>(
-            'doc', doc));
+            'doc', doc,),);
   }
 }
 
@@ -1773,7 +1774,7 @@ class _EnquiryCardRouterState extends State<_EnquiryCardRouter> {
         }
         // Still in progress — live listener, since status can change.
         return _LiveEnquiryCard(
-            requestId: widget.doc.id, initialData: initialData);
+            requestId: widget.doc.id, initialData: initialData,);
       },
     );
   }
@@ -1797,7 +1798,7 @@ class _LiveEnquiryCard extends StatefulWidget {
     super.debugFillProperties(properties);
     properties.add(StringProperty('requestId', requestId));
     properties.add(
-        DiagnosticsProperty<Map<String, dynamic>>('initialData', initialData));
+        DiagnosticsProperty<Map<String, dynamic>>('initialData', initialData),);
   }
 }
 
@@ -1869,7 +1870,7 @@ class _EnquiryCardView extends StatelessWidget {
           builder: (_) => isStillSearching
               ? HeroSearchRadarScreen(
                   requestId: requestId,
-                  serviceLabel: categoryLabel?.isNotEmpty == true
+                  serviceLabel: categoryLabel?.isNotEmpty ?? false
                       ? categoryLabel!
                       : 'Repair Hero',
                   matchedScreenBuilder: (id) => ServiceRequestTrackingScreen(

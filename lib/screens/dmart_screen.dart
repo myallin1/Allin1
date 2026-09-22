@@ -94,9 +94,8 @@ class _DmartScreenState extends State<DmartScreen> {
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       const SnackBar(
-        content: Text('Take a screenshot of what you want (your device\'s screenshot '
+        content: Text("Take a screenshot of what you want (your device's screenshot "
             'shortcut), then pick it in the next step.'),
-        duration: Duration(seconds: 4),
       ),
     );
 
@@ -134,7 +133,7 @@ class _DmartScreenState extends State<DmartScreen> {
         if (!mounted) return;
         messenger.showSnackBar(
           const SnackBar(content: Text("Couldn't read a product from that photo — please type it "
-              'into the grocery list instead.')),
+              'into the grocery list instead.'),),
         );
         return;
       }

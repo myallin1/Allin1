@@ -8,10 +8,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-import '../widgets/economic_vision_banner.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../widgets/economic_vision_banner.dart';
 import 'hero_pending_screen.dart';
 import 'hero_register_screen.dart';
 

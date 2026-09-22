@@ -27,8 +27,8 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../services/chitti/chitti_lens_service.dart';
 import '../../services/chitti/chitti_accessibility_bridge.dart';
+import '../../services/chitti/chitti_lens_service.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _card = Color(0xFF16162A);
@@ -124,7 +124,7 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
         await _speak(ChittiLensService.spokenLine(
           result,
           languageCode: widget.languageCode,
-        ));
+        ),);
       }
     } catch (e) {
       if (!mounted) return;
@@ -133,7 +133,7 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
             entities: const [],
             pageTitles: const [],
             error: '$e',
-          ));
+          ),);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -158,7 +158,7 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
         iconTheme: const IconThemeData(color: _text),
         title: Text('Chitti Lens',
             style: GoogleFonts.outfit(
-                color: _text, fontWeight: FontWeight.w700, fontSize: 16)),
+                color: _text, fontWeight: FontWeight.w700, fontSize: 16,),),
         actions: [
           IconButton(
             tooltip: 'Vision API key',
@@ -188,7 +188,7 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
           padding: const EdgeInsets.all(24),
           child: Text(err,
               textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(color: _amber, fontSize: 13)),
+              style: GoogleFonts.outfit(color: _amber, fontSize: 13),),
         ),
       );
     }
@@ -214,10 +214,10 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
             const SizedBox(
                 width: 16,
                 height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: _purple)),
+                child: CircularProgressIndicator(strokeWidth: 2, color: _purple),),
             const SizedBox(width: 10),
             Text('Chitti is looking this up…',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 12.5)),
+                style: GoogleFonts.outfit(color: _muted, fontSize: 12.5),),
           ],
         ),
       );
@@ -263,17 +263,17 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
         children: [
           // "Looks like", never "This is" — see the header.
           Text('Looks like  ·  $pct% match',
-              style: GoogleFonts.outfit(color: _muted, fontSize: 11.5)),
+              style: GoogleFonts.outfit(color: _muted, fontSize: 11.5),),
           const SizedBox(height: 3),
           Text(label,
               style: GoogleFonts.outfit(
-                  color: _text, fontSize: 19, fontWeight: FontWeight.w700)),
+                  color: _text, fontSize: 19, fontWeight: FontWeight.w700,),),
           if (r.pageTitles.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(r.pageTitles.take(2).join('  ·  '),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11),),
           ],
           const SizedBox(height: 12),
           Row(
@@ -283,7 +283,7 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
                   onPressed: () => _speak(ChittiLensService.greetingLine(
                     label,
                     languageCode: widget.languageCode,
-                  )),
+                  ),),
                   icon: const Icon(Icons.volume_up_rounded, size: 17),
                   label: const Text('Greet them'),
                   style: ElevatedButton.styleFrom(
@@ -291,7 +291,7 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
                     foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(vertical: 11),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(11)),
+                        borderRadius: BorderRadius.circular(11),),
                   ),
                 ),
               ),
@@ -301,7 +301,7 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
                   onPressed: () => _speak(ChittiLensService.spokenLine(
                     r,
                     languageCode: widget.languageCode,
-                  )),
+                  ),),
                   icon: const Icon(Icons.record_voice_over_rounded, size: 17),
                   label: const Text('Say what it is'),
                   style: OutlinedButton.styleFrom(
@@ -319,7 +319,7 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
   }
 
   Widget _panel(
-      {required Color color, required String title, required String body}) {
+      {required Color color, required String title, required String body,}) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -333,10 +333,10 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
         children: [
           Text(title,
               style: GoogleFonts.outfit(
-                  color: color, fontSize: 14, fontWeight: FontWeight.w700)),
+                  color: color, fontSize: 14, fontWeight: FontWeight.w700,),),
           const SizedBox(height: 4),
           Text(body,
-              style: GoogleFonts.outfit(color: _muted, fontSize: 12)),
+              style: GoogleFonts.outfit(color: _muted, fontSize: 12),),
         ],
       ),
     );
@@ -374,7 +374,7 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(13)),
+                    borderRadius: BorderRadius.circular(13),),
               ),
             ),
           ),
@@ -408,7 +408,7 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
           children: [
             Text('Google Cloud Vision API key',
                 style: GoogleFonts.outfit(
-                    color: _text, fontSize: 16, fontWeight: FontWeight.w700)),
+                    color: _text, fontSize: 16, fontWeight: FontWeight.w700,),),
             const SizedBox(height: 6),
             Text(
               'Enable "Cloud Vision API" in Google Cloud Console, create an '
@@ -428,7 +428,7 @@ class _AdminChittiLensScreenState extends State<AdminChittiLensScreen> {
                 fillColor: _bg,
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none),
+                    borderSide: BorderSide.none,),
               ),
             ),
             const SizedBox(height: 14),

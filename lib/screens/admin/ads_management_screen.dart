@@ -6,9 +6,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:erode_superapp/models/mobile_models.dart' show isValidYoutubeUrl;
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+
+import '../../models/mobile_models.dart' show isValidYoutubeUrl;
 import '../../services/firestore_usage_tracking.dart';
+import '../../widgets/cached_cloud_image.dart';
 
 class AdsManagementScreen extends StatefulWidget {
   const AdsManagementScreen({super.key});
@@ -595,8 +596,8 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
         }).length;
         final views = docs.fold<int>(
           0,
-          (sum, d) =>
-              sum + ((d.data()! as Map<String, dynamic>)['views'] as int? ?? 0),
+          (totalViews, d) =>
+              totalViews + ((d.data()! as Map<String, dynamic>)['views'] as int? ?? 0),
         );
 
         return Container(
@@ -717,7 +718,6 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
                         data['imageUrl'] as String,
                         height: 150,
                         width: double.infinity,
-                        fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Container(
                           height: 150,
                           color: _surface,
@@ -937,4 +937,3 @@ class _AdsManagementScreenState extends State<AdsManagementScreen> {
     );
   }
 }
-

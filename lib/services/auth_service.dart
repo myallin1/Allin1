@@ -3,21 +3,22 @@
 // Allin1 Super App v1.0
 // ================================================================
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:async';
-
 import 'package:google_sign_in/google_sign_in.dart';
+// GUEST MODE: upgradeGuestWithGoogle() reads the same 'campaign_source'
+// pref the welcome screen's sign-up path reads, so attribution is not
+// lost when a customer signs up from the auth sheet instead.
+import 'package:shared_preferences/shared_preferences.dart';
+
 // NEW (Aug 12 2026 — Affiliate QR Generator): attributes a signup back
 // to whichever affiliate code, if any, is pending for this device.
 import 'affiliate_service.dart';
 // Phone cache (Aug 11 2026): removes a users/{uid} read from every booking.
 import 'hive_cache.dart';
-// GUEST MODE: upgradeGuestWithGoogle() reads the same 'campaign_source'
-// pref the welcome screen's sign-up path reads, so attribution is not
-// lost when a customer signs up from the auth sheet instead.
-import 'package:shared_preferences/shared_preferences.dart';
 import 'session_service.dart';
 
 // ================================================================
@@ -559,7 +560,7 @@ class AuthService {
           phone: mobile,
           email: user.email ?? '',
           role: 'customer',
-        ));
+        ),);
       }
       // Existing profile: the typed mobile number is intentionally
       // discarded rather than overwriting a registered one.

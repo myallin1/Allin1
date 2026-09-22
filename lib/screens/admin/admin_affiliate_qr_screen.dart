@@ -32,9 +32,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../services/affiliate_service.dart';
-import 'admin_campaign_detail_screen.dart';
 import '../../services/qr_image_saver_stub.dart'
     if (dart.library.html) '../../services/qr_image_saver_web.dart';
+import 'admin_campaign_detail_screen.dart';
 
 const Color _bg = Color(0xFF0A0A12);
 const Color _card = Color(0xFF141420);
@@ -251,7 +251,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
         setState(() => _statusMessage =
             'Custom link must be 3–32 characters, letters/numbers/hyphens, '
             'and include at least one letter. Words like "verify", "otp" or '
-            '"payment" are blocked — they make a link look like a scam.');
+            '"payment" are blocked — they make a link look like a scam.',);
         return;
       }
     }
@@ -361,9 +361,9 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                 children: [
                   Text(label,
                       style: const TextStyle(
-                          color: _text, fontWeight: FontWeight.w700)),
+                          color: _text, fontWeight: FontWeight.w700,),),
                   Text(code,
-                      style: const TextStyle(color: _muted, fontSize: 12)),
+                      style: const TextStyle(color: _muted, fontSize: 12),),
                   const SizedBox(height: 12),
                   if (hasTraffic) ...[
                     Text(
@@ -371,7 +371,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                       'Real people have used it, so a printed QR is probably '
                       'out there.',
                       style: const TextStyle(
-                          color: _muted, fontSize: 12.5, height: 1.45),
+                          color: _muted, fontSize: 12.5, height: 1.45,),
                     ),
                     const SizedBox(height: 8),
                     const Text(
@@ -380,11 +380,11 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                       'for nobody. Pausing keeps all the numbers and can be '
                       'undone.',
                       style: TextStyle(
-                          color: _muted, fontSize: 12.5, height: 1.45),
+                          color: _muted, fontSize: 12.5, height: 1.45,),
                     ),
                     const SizedBox(height: 14),
                     Text('Type $code to confirm deletion:',
-                        style: const TextStyle(color: _red, fontSize: 12)),
+                        style: const TextStyle(color: _red, fontSize: 12),),
                     const SizedBox(height: 6),
                     TextField(
                       controller: typedCtrl,
@@ -406,7 +406,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                       'No scans and no signups yet — nothing is lost. If this '
                       'QR was already printed, pause it instead.',
                       style: TextStyle(
-                          color: _muted, fontSize: 12.5, height: 1.45),
+                          color: _muted, fontSize: 12.5, height: 1.45,),
                     ),
                 ],
               ),
@@ -422,7 +422,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                   onPressed: () => Navigator.pop(ctx, 'pause'),
                   child: const Text('Pause instead',
                       style: TextStyle(
-                          color: _green, fontWeight: FontWeight.w700)),
+                          color: _green, fontWeight: FontWeight.w700,),),
                 ),
               TextButton(
                 onPressed: typedOk ? () => Navigator.pop(ctx, 'delete') : null,
@@ -445,11 +445,11 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
 
     try {
       if (action == 'pause') {
-        await AffiliateService.instance.setActive(code, false);
+        await AffiliateService.instance.setActive(code, active: false);
         if (!mounted) return;
         setState(() => _statusMessage =
             'Campaign $code paused — its numbers are kept and it can be '
-            'resumed any time.');
+            'resumed any time.',);
         return;
       }
 
@@ -672,23 +672,22 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                       decoration: InputDecoration(
                         prefixText: 'my-allin1.web.app/q/?c=',
                         prefixStyle: const TextStyle(
-                            color: _muted, fontSize: 12.5),
+                            color: _muted, fontSize: 12.5,),
                         hintText: 'erode-hotels',
                         hintStyle: const TextStyle(color: _muted, fontSize: 13),
                         helperText: _slugController.text.trim().isEmpty
                             ? 'Optional — leave blank for an auto code'
                             : (AffiliateService.normalizeCustomCode(
-                                        _slugController.text) ==
+                                        _slugController.text,) ==
                                     null
-                                ? 'Not usable — 3–32 chars, letters/numbers/'
-                                    'hyphens, must contain a letter'
+                                ? 'Not usable — 3–32 chars, letters/numbers/hyphens, must contain a letter'
                                 : 'Link will be: my-allin1.web.app/q/?c='
                                     '${AffiliateService.normalizeCustomCode(_slugController.text)}'),
                         helperStyle: TextStyle(
                           fontSize: 11,
                           color: _slugController.text.trim().isNotEmpty &&
                                   AffiliateService.normalizeCustomCode(
-                                          _slugController.text) ==
+                                          _slugController.text,) ==
                                       null
                               ? _red
                               : _muted,
@@ -701,7 +700,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                           borderSide: const BorderSide(color: _border),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
+                            horizontal: 14, vertical: 12,),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -745,7 +744,6 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                             children: [
                               QrImageView(
                                 data: _activeUrl,
-                                version: QrVersions.auto,
                                 size: qrSize,
                                 backgroundColor: _bgColor,
                                 // Level H (~30% recoverable) is what makes
@@ -755,30 +753,6 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                                 eyeStyle: QrEyeStyle(eyeShape: qrEyeShape, color: _fgColor),
                                 dataModuleStyle:
                                     QrDataModuleStyle(dataModuleShape: qrModuleShape, color: _fgColor),
-                                // FIX (Aug 17 2026 — Nizam: "qr ku namma
-                                // upload pandra logo outer la oru white
-                                // box overa vanthturuthu").
-                                //
-                                // ROOT CAUSE: the logo was being drawn
-                                // TWICE. qr_flutter's `embeddedImage`
-                                // painted it into the code here, and the
-                                // Stack overlay below then painted the
-                                // SAME image again on top — inside a
-                                // white container 6% wider than the logo
-                                // PLUS 2.5%-of-QR padding on every side.
-                                // Those two paddings compounded into the
-                                // oversized white box, and the doubled
-                                // draw made the logo look soft where the
-                                // two copies were a fraction out of
-                                // alignment.
-                                //
-                                // embeddedImage is dropped and the
-                                // overlay kept, because the overlay is
-                                // the only one of the two that can also
-                                // provide the "quiet patch" a
-                                // transparent/non-square PNG needs (see
-                                // below). One draw, one padding.
-                                embeddedImage: null,
                               ),
                               // The logo, on a white patch just big
                               // enough to be a border.
@@ -810,11 +784,11 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                                         decoration: BoxDecoration(
                                           color: _bgColor,
                                           borderRadius: BorderRadius.circular(
-                                              patch * 0.14),
+                                              patch * 0.14,),
                                         ),
                                         child: Padding(
                                           padding: EdgeInsets.all(
-                                              logoBox * _kLogoBorderRatio / 2),
+                                              logoBox * _kLogoBorderRatio / 2,),
                                           child: Image.memory(
                                             _logoBytes!,
                                             fit: BoxFit.contain,
@@ -908,7 +882,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text('Centre logo',
-                          style: TextStyle(color: _text.withValues(alpha: 0.8), fontSize: 12.5)),
+                          style: TextStyle(color: _text.withValues(alpha: 0.8), fontSize: 12.5),),
                       const SizedBox(height: 8),
                       Row(
                         children: [
@@ -932,7 +906,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: _pink),
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10)),
+                                  borderRadius: BorderRadius.circular(10),),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -963,7 +937,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                         Row(
                           children: [
                             const Text('Logo size',
-                                style: TextStyle(color: _muted, fontSize: 11.5)),
+                                style: TextStyle(color: _muted, fontSize: 11.5),),
                             Expanded(
                               child: Slider(
                                 value: _logoScale,
@@ -974,7 +948,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                               ),
                             ),
                             Text('${(_logoScale * 100).toStringAsFixed(0)}%',
-                                style: const TextStyle(color: _text, fontSize: 11.5)),
+                                style: const TextStyle(color: _text, fontSize: 11.5),),
                           ],
                         ),
                         // Live scannability read-out. Level H recovers
@@ -1213,7 +1187,7 @@ class _AdminAffiliateQrScreenState extends State<AdminAffiliateQrScreen> {
                             ),
                             const SizedBox(width: 6),
                             const Icon(Icons.chevron_right_rounded,
-                                color: _muted, size: 18),
+                                color: _muted, size: 18,),
                           ],
                         ),
                         ),

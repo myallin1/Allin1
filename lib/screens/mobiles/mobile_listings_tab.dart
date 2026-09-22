@@ -20,9 +20,9 @@
 // See the header of mobile_hub_screen.dart for why.
 // ================================================================
 
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' show DocumentSnapshot;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/mobile_models.dart';
@@ -32,17 +32,18 @@ import '../../services/mobile_catalog_service.dart';
 import '../../services/mobile_listing_service.dart';
 import '../../services/service_request_service.dart';
 import '../../widgets/cached_cloud_image.dart';
-import '../service_request_tracking_screen.dart';
 import '../../widgets/premium_theme.dart';
+import '../service_request_tracking_screen.dart';
 import 'listing_video_player.dart';
 import 'mobile_hub_screen.dart';
 import 'sell_your_phone_sheet.dart';
+import 'signature_mobiles_screen.dart';
 
 class MobileListingsTab extends StatefulWidget {
   /// 'new' or 'used' — see MobileCondition.
   final String condition;
 
-  const MobileListingsTab({super.key, required this.condition});
+  const MobileListingsTab({required this.condition, super.key});
 
   @override
   State<MobileListingsTab> createState() => _MobileListingsTabState();
@@ -107,12 +108,14 @@ class _MobileListingsTabState extends State<MobileListingsTab>
   /// the cursor. Forgetting that reset would make a refresh append page
   /// 2 onto a stale page 1 instead of starting over.
   Future<void> _load() async {
-    if (mounted) setState(() {
+    if (mounted) {
+      setState(() {
       _loading = true;
       _error = null;
       _cursor = null;
       _hasMore = true;
     });
+    }
     try {
       await MobileCatalogService.instance.ensureLoaded();
       final page =
@@ -219,10 +222,213 @@ class _MobileListingsTabState extends State<MobileListingsTab>
           ),
         ),
         _buildSearchBar(),
+        if (!_isUsed && _all.isNotEmpty) _buildSignatureBanner(),
         if (_availableBrands.isNotEmpty) _buildBrandChips(),
         if (_isUsed) _buildSellYourPhoneBanner(),
         Expanded(child: _buildBody()),
       ],
+    );
+  }
+
+  Widget _buildSignatureBanner() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => const SignatureMobilesScreen(),
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2E103B), Color(0xFF16152B)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: kMobPink.withValues(alpha: 0.45)),
+            boxShadow: [
+              BoxShadow(
+                color: kMobPink.withValues(alpha: 0.15),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [kMobPink, Color(0xFF9C27B0)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.stars_rounded, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'NJ Tech Signature Store',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: kMobGold.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: kMobGold.withValues(alpha: 0.6)),
+                          ),
+                          child: Text(
+                            'OFFICIAL',
+                            style: GoogleFonts.outfit(
+                              color: kMobGold,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Brand new phones, pre-owned & spares with Allin1 warranty',
+                      style: GoogleFonts.outfit(
+                        color: kMobMuted,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, color: kMobPink, size: 14),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSignatureEmptyHeroCard() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF260D38), Color(0xFF15142E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: kMobPink.withValues(alpha: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: kMobPink.withValues(alpha: 0.2),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: kMobPink.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.verified_rounded, color: kMobPink, size: 28),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'NJ Tech Signature Mobiles',
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'Allin1 Official Store • Erode Flagship',
+                      style: GoogleFonts.outfit(
+                        color: kMobGold,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Explore certified new & pre-owned phones, fast chargers, displays and accessories with 100% genuine warranty and hero doorstep delivery.',
+            style: GoogleFonts.outfit(
+              color: kMobText.withValues(alpha: 0.85),
+              fontSize: 12.5,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SignatureMobilesScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.shopping_bag_outlined, color: Colors.white, size: 18),
+              label: Text(
+                'Open Signature Store',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kMobPink,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -326,9 +532,9 @@ class _MobileListingsTabState extends State<MobileListingsTab>
                       ),
                     ),
                     Text(
-                      'Send us the details — we\'ll quote you a price',
+                      "Send us the details — we'll quote you a price",
                       style: GoogleFonts.outfit(
-                          color: kMobMuted, fontSize: 11),
+                          color: kMobMuted, fontSize: 11,),
                     ),
                   ],
                 ),
@@ -358,28 +564,52 @@ class _MobileListingsTabState extends State<MobileListingsTab>
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: 20),
           children: [
-            const SizedBox(height: 60),
+            if (!_isUsed) ...[
+              _buildSignatureEmptyHeroCard(),
+              const SizedBox(height: 24),
+            ],
             Icon(
               _error != null
-                  ? Icons.cloud_off_rounded
+                  ? Icons.storefront_outlined
                   : Icons.smartphone_rounded,
-              color: kMobMuted,
-              size: 56,
+              color: kMobMuted.withValues(alpha: 0.6),
+              size: 44,
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 36),
+                child: Text(
+                  _search.isNotEmpty
+                      ? 'No phones match "$_search". Explore our Signature Store catalog above!'
+                      : (_all.isEmpty
+                          ? (_isUsed
+                              ? 'Local shops haven’t listed used units yet. Check back soon or submit your phone above!'
+                              : 'External shop inventory is syncing. Visit our Official Store above for verified stock!')
+                          : 'No phones match your selected brand filter.'),
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(
+                    color: kMobMuted,
+                    fontSize: 12.5,
+                    height: 1.4,
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 14),
             Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: Text(
-                  _error ??
-                      (_all.isEmpty
-                          ? (_isUsed
-                              ? 'No used phones listed yet. Check back soon.'
-                              : 'No phones listed yet. Check back soon.')
-                          : 'No phones match your search.'),
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(color: kMobMuted, fontSize: 13),
+              child: OutlinedButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded, size: 16, color: kMobPink),
+                label: Text(
+                  'Refresh Listings',
+                  style: GoogleFonts.outfit(color: kMobPink, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: kMobPink.withValues(alpha: 0.4)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
             ),
@@ -490,7 +720,7 @@ class _MobileListingsTabState extends State<MobileListingsTab>
   /// restriction on `details`, so new keys are safe to add.
   Future<void> _sendBuyEnquiry(MobileListing listing) async {
     if (!await requireRealAuth(context,
-        reason: 'Sign in to enquire about this phone')) {
+        reason: 'Sign in to enquire about this phone',)) {
       return;
     }
     final user = FirebaseAuth.instance.currentUser;
@@ -572,7 +802,6 @@ class _MobileCard extends StatelessWidget {
     // from premium_theme.dart so this can't drift from Rewards.
     return PremiumCard(
       onTap: onTap,
-      radius: kRadiusLg,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -644,7 +873,7 @@ class _MobileCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text('\u20B9${listing.price.toInt()}',
-                        style: premiumPrice(context, size: 16)),
+                        style: premiumPrice(context, size: 16),),
                     const SizedBox(width: 6),
                     if (listing.mrp != null && discount != null)
                       Expanded(
@@ -670,7 +899,7 @@ class _MobileCard extends StatelessWidget {
                   Row(
                     children: [
                       const Icon(Icons.credit_card_rounded,
-                          color: kPremiumGreen, size: 11),
+                          color: kPremiumGreen, size: 11,),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -690,7 +919,7 @@ class _MobileCard extends StatelessWidget {
                 Row(
                   children: [
                     Icon(Icons.storefront_rounded,
-                        color: context.premium.muted, size: 11),
+                        color: context.premium.muted, size: 11,),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -725,8 +954,7 @@ class MobileListingImage extends StatelessWidget {
   final int? cacheWidth;
 
   const MobileListingImage({
-    super.key,
-    required this.listing,
+    required this.listing, super.key,
     this.cacheWidth,
   });
 
@@ -736,7 +964,6 @@ class MobileListingImage extends StatelessWidget {
     if (own != null && own.isNotEmpty) {
       return CachedCloudImage(
         own,
-        fit: BoxFit.cover,
         cacheWidth: cacheWidth,
         errorWidget: MobilePhotoFallback(brand: listing.brand),
       );
@@ -803,7 +1030,7 @@ class _ListingDetailSheet extends StatelessWidget {
                     SizedBox(
                       height: 220,
                       child: MobileListingImage(
-                          listing: listing, cacheWidth: 700),
+                          listing: listing, cacheWidth: 700,),
                     ),
                     // Video sits directly under the photo: for a used
                     // phone it is the strongest proof of condition a
@@ -871,13 +1098,13 @@ class _ListingDetailSheet extends StatelessWidget {
                           ),
                           const SizedBox(height: 16),
                           _row(Icons.storefront_rounded, 'Shop',
-                              listing.sellerName),
+                              listing.sellerName,),
                           if (listing.variant.isNotEmpty)
                             _row(Icons.memory_rounded, 'Variant',
-                                listing.variant),
+                                listing.variant,),
                           if (listing.color.isNotEmpty)
                             _row(Icons.palette_outlined, 'Colour',
-                                listing.color),
+                                listing.color,),
                           _row(
                             listing.isUsed
                                 ? Icons.verified_outlined
@@ -889,11 +1116,11 @@ class _ListingDetailSheet extends StatelessWidget {
                           ),
                           if (listing.warrantyMonths > 0)
                             _row(Icons.shield_outlined, 'Warranty',
-                                '${listing.warrantyMonths} months'),
+                                '${listing.warrantyMonths} months',),
                           if (listing.notes != null &&
                               listing.notes!.trim().isNotEmpty)
                             _row(Icons.notes_rounded, 'Details',
-                                listing.notes!.trim()),
+                                listing.notes!.trim(),),
                         ],
                       ),
                     ),
@@ -916,7 +1143,7 @@ class _ListingDetailSheet extends StatelessWidget {
                       ),
                       onPressed: onEnquire,
                       icon: const Icon(Icons.shopping_bag_outlined,
-                          color: Colors.white, size: 20),
+                          color: Colors.white, size: 20,),
                       label: Text(
                         'Enquire / Book this phone',
                         style: GoogleFonts.outfit(
@@ -950,7 +1177,7 @@ class _ListingDetailSheet extends StatelessWidget {
               children: [
                 Text(label,
                     style:
-                        GoogleFonts.outfit(color: kMobMuted, fontSize: 10.5)),
+                        GoogleFonts.outfit(color: kMobMuted, fontSize: 10.5),),
                 Text(
                   value,
                   style: GoogleFonts.outfit(

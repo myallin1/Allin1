@@ -24,7 +24,7 @@
   "hosting": [
     {
       "target": "customer",
-      "public": "build/web_customer",
+      "public": "build/web",
       "ignore": [
         "firebase.json",
         "**/.git/**",
@@ -87,7 +87,7 @@
     },
     {
       "target": "hero",
-      "public": "build/web_hero",
+      "public": "build/web",
       "ignore": [
         "firebase.json",
         "**/.git/**",
@@ -150,7 +150,7 @@
     },
     {
       "target": "admin",
-      "public": "build/web_admin",
+      "public": "build/web",
       "ignore": [
         "firebase.json",
         "**/.git/**",
@@ -213,7 +213,7 @@
     },
     {
       "target": "seller",
-      "public": "build/web_seller",
+      "public": "build/web",
       "ignore": [
         "firebase.json",
         "**/.git/**",

@@ -39,7 +39,6 @@
 // the generated PNG can be handed straight to the OS share sheet
 // (WhatsApp included, if installed) instead of only being saved/opened
 // locally.
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -256,7 +255,6 @@ class _AdminQrGeneratorScreenState extends State<AdminQrGeneratorScreen> {
                           children: [
                             QrImageView(
                               data: kPosterQrTargetUrl,
-                              version: QrVersions.auto,
                               size: qrSize,
                               backgroundColor: Colors.white,
                               // High error-correction so the center logo
@@ -304,10 +302,10 @@ class _AdminQrGeneratorScreenState extends State<AdminQrGeneratorScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    SelectableText(
+                    const SelectableText(
                       kPosterQrTargetUrl,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: _text, fontSize: 13),
+                      style: TextStyle(color: _text, fontSize: 13),
                     ),
                   ],
                 ),

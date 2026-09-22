@@ -76,7 +76,7 @@ class _CustomerDemandScreenState extends State<CustomerDemandScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: _card,
         title: Text('Rebuild from history?',
-            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800)),
+            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w800),),
         content: Text(
           'This scans your existing rides and service requests ONCE and '
           'seeds the demand counters from them.\n\n'
@@ -180,7 +180,7 @@ class _CustomerDemandScreenState extends State<CustomerDemandScreen> {
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: _gold),
+                          strokeWidth: 2, color: _gold,),
                     )
                   : const Icon(Icons.history_rounded, size: 16),
               label: Text(
@@ -211,7 +211,7 @@ class _CustomerDemandScreenState extends State<CustomerDemandScreen> {
                     Text(
                       'No demand data yet.',
                       style: GoogleFonts.outfit(
-                          color: _text, fontWeight: FontWeight.w700, fontSize: 16),
+                          color: _text, fontWeight: FontWeight.w700, fontSize: 16,),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -277,7 +277,7 @@ class _CustomerDemandScreenState extends State<CustomerDemandScreen> {
     // Top 10 keeps the screen readable; the underlying doc holds them all.
     final top = entries.take(10).toList();
     final maxCount = top.first.value;
-    final total = entries.fold<int>(0, (sum, e) => sum + e.value);
+    final total = entries.fold<int>(0, (acc, e) => acc + e.value);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -300,7 +300,7 @@ class _CustomerDemandScreenState extends State<CustomerDemandScreen> {
                     Text(
                       title,
                       style: GoogleFonts.outfit(
-                          color: _text, fontWeight: FontWeight.w800, fontSize: 15),
+                          color: _text, fontWeight: FontWeight.w800, fontSize: 15,),
                     ),
                     Text(
                       subtitle,
@@ -312,7 +312,7 @@ class _CustomerDemandScreenState extends State<CustomerDemandScreen> {
               Text(
                 '$total',
                 style: GoogleFonts.outfit(
-                    color: accent, fontWeight: FontWeight.w900, fontSize: 18),
+                    color: accent, fontWeight: FontWeight.w900, fontSize: 18,),
               ),
             ],
           ),
@@ -334,7 +334,7 @@ class _CustomerDemandScreenState extends State<CustomerDemandScreen> {
                           style: GoogleFonts.outfit(
                               color: _text,
                               fontSize: 13,
-                              fontWeight: FontWeight.w600),
+                              fontWeight: FontWeight.w600,),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -343,7 +343,7 @@ class _CustomerDemandScreenState extends State<CustomerDemandScreen> {
                         style: GoogleFonts.outfit(
                             color: _muted,
                             fontSize: 12,
-                            fontWeight: FontWeight.w700),
+                            fontWeight: FontWeight.w700,),
                       ),
                     ],
                   ),

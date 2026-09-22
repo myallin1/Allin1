@@ -245,7 +245,7 @@ class _ServiceFlowMonitorScreenState extends State<ServiceFlowMonitorScreen>
         heroName: (d['assignedHeroName'] as String?) ?? '',
         createdAt: d['createdAt'],
         updatedAt: d['updatedAt'],
-      ));
+      ),);
     }
 
     final ridesSnap = await db
@@ -269,11 +269,11 @@ class _ServiceFlowMonitorScreenState extends State<ServiceFlowMonitorScreen>
         heroName: (d['heroName'] as String?) ?? '',
         createdAt: d['createdAt'],
         updatedAt: d['updatedAt'],
-      ));
+      ),);
     }
 
     rows.sort((a, b) =>
-        ((b['createdAtMs'] as int?) ?? 0).compareTo((a['createdAtMs'] as int?) ?? 0));
+        ((b['createdAtMs'] as int?) ?? 0).compareTo((a['createdAtMs'] as int?) ?? 0),);
     return rows;
   }
 
@@ -334,10 +334,9 @@ class _ServiceFlowMonitorScreenState extends State<ServiceFlowMonitorScreen>
     if (_categoryFilter != null) {
       rows = rows.where((r) => r['category'] == _categoryFilter).toList();
     }
-    rows = rows
+    return rows
         .where((r) => matchesPhoneFilter((r['customerPhone'] as String?) ?? ''))
         .toList();
-    return rows;
   }
 
   @override
@@ -878,7 +877,7 @@ class _ServiceFlowMonitorScreenState extends State<ServiceFlowMonitorScreen>
               ),
               IconButton(
                 icon: const Icon(Icons.delete_outline_rounded,
-                    color: _red, size: 19),
+                    color: _red, size: 19,),
                 visualDensity: VisualDensity.compact,
                 tooltip: 'Delete test record',
                 onPressed: () => _deleteOne(r),

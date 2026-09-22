@@ -35,7 +35,6 @@ Future<Uint8List> compressImage(
       minWidth: dimension,
       minHeight: dimension,
       quality: floorQuality,
-      format: CompressFormat.jpeg,
     );
 
     if (best == null || floorJpg.length < best.length) best = floorJpg;
@@ -48,7 +47,6 @@ Future<Uint8List> compressImage(
         minWidth: dimension,
         minHeight: dimension,
         quality: quality,
-        format: CompressFormat.jpeg,
       );
       if (jpg.length <= targetBytes) return jpg;
     }

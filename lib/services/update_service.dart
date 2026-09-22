@@ -142,6 +142,7 @@ class UpdateService {
   String _stringValue(value) {
     return value?.toString().trim() ?? '';
   }
+
 }
 
 extension on String {

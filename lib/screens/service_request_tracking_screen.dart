@@ -230,7 +230,7 @@ class ServiceRequestTrackingScreen extends StatelessWidget {
                         Text(
                           'Rate your Hero',
                           style: GoogleFonts.outfit(
-                              color: _kText, fontSize: 14, fontWeight: FontWeight.w700),
+                              color: _kText, fontSize: 14, fontWeight: FontWeight.w700,),
                         ),
                         const SizedBox(height: 10),
                         RatingFeedbackSheet(

@@ -571,9 +571,9 @@ class CredentialProvider extends ChangeNotifier {
   }
 
   /// Set online status (for external network monitoring)
-  void setOnlineStatus(bool isOnline) {
+  void setOnlineStatus({required bool isOnline}) {
     _isOnline = isOnline;
-    _cacheService.setOnlineStatus(isOnline);
+    _cacheService.setOnlineStatus(isOnline: isOnline);
     notifyListeners();
   }
 

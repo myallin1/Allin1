@@ -41,10 +41,10 @@ mixin AdminSelectionMixin<T extends StatefulWidget> on State<T> {
   void selectAll(Iterable<String> ids) {
     setState(() => selectedIds
       ..clear()
-      ..addAll(ids));
+      ..addAll(ids),);
   }
 
-  void clearSelection() => setState(() => selectedIds.clear());
+  void clearSelection() => setState(selectedIds.clear);
 
   void setPhoneFilter(String value) => setState(() => phoneFilter = value);
 
@@ -88,7 +88,7 @@ mixin AdminSelectionMixin<T extends StatefulWidget> on State<T> {
                   hintStyle:
                       const TextStyle(color: Color(0xFF7777A0), fontSize: 12.5),
                   prefixIcon: const Icon(Icons.phone_iphone_rounded,
-                      size: 16, color: Color(0xFF7777A0)),
+                      size: 16, color: Color(0xFF7777A0),),
                   filled: true,
                   fillColor: const Color(0xFF1A1A2E),
                   border: OutlineInputBorder(
@@ -111,7 +111,7 @@ mixin AdminSelectionMixin<T extends StatefulWidget> on State<T> {
           TextButton(
             onPressed: () => selectAll(visibleIds),
             child: const Text('Select all',
-                style: TextStyle(color: Color(0xFFFF4FA3), fontSize: 12.5)),
+                style: TextStyle(color: Color(0xFFFF4FA3), fontSize: 12.5),),
           ),
         ],
       ],

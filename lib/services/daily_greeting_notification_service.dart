@@ -47,8 +47,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
-import 'chitti/chitti_welcome_service.dart';
 import '../config/app_variant.dart';
+import 'chitti/chitti_welcome_service.dart';
 import 'daily_quote_service.dart';
 
 class DailyGreetingNotificationService {
@@ -83,7 +83,7 @@ class DailyGreetingNotificationService {
     return prefs.getInt(_hourKey) ?? defaultHour;
   }
 
-  Future<void> setEnabled(bool value) async {
+  Future<void> setEnabled({required bool value}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enabledKey, value);
     if (value) {
@@ -125,7 +125,6 @@ class DailyGreetingNotificationService {
         _channelId,
         'Daily Good Morning',
         description: "Chitti's morning wish and the thought for the day.",
-        importance: Importance.defaultImportance,
       ),
     );
     _ready = true;
@@ -176,8 +175,6 @@ class DailyGreetingNotificationService {
             'Daily Good Morning',
             channelDescription:
                 "Chitti's morning wish and the thought for the day.",
-            importance: Importance.defaultImportance,
-            priority: Priority.defaultPriority,
             // The quote is a sentence, not a label — without this
             // Android truncates it to one line and the whole point of
             // the notification is the part that got cut off.

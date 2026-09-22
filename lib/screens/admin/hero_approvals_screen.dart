@@ -7,15 +7,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import '../../services/chitti/chitti_voice_service.dart';
 
 import '../../config/city_config.dart';
 import '../../config/hero_skill_catalog.dart';
-import 'admin_hero_details_screen.dart';
+import '../../services/chitti/chitti_voice_service.dart';
 import '../../services/firestore_usage_tracking.dart';
+import 'admin_hero_details_screen.dart';
 
 // ── Theme (matches admin dashboard) ────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -463,8 +463,8 @@ class _HeroApprovalsScreenState extends State<HeroApprovalsScreen> {
         if (phone.isNotEmpty) {
           final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
           final formattedPhone = cleanPhone.startsWith('91') ? cleanPhone : '91$cleanPhone';
-          final welcomeMsg = "Vanakkam $name! Allin1 app-il ungal captain profile approve seyyapattathu. Welcome aboard! - NJ Tech Team.";
-          final url = Uri.parse("https://wa.me/$formattedPhone?text=${Uri.encodeComponent(welcomeMsg)}");
+          final welcomeMsg = 'Vanakkam $name! Allin1 app-il ungal captain profile approve seyyapattathu. Welcome aboard! - NJ Tech Team.';
+          final url = Uri.parse('https://wa.me/$formattedPhone?text=${Uri.encodeComponent(welcomeMsg)}');
           if (await canLaunchUrl(url)) {
             await launchUrl(url, mode: LaunchMode.externalApplication);
           }

@@ -11,7 +11,6 @@
 // (no map-provider picker — sellers don't navigate maps).
 // ================================================================
 import 'dart:async';
-
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -20,8 +19,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-
-import 'ai_settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/cloudinary_upload_service.dart';
@@ -29,6 +26,7 @@ import '../services/custom_hotel_service.dart';
 import '../services/localization_service.dart';
 import '../services/theme_service.dart';
 import '../widgets/cached_cloud_image.dart';
+import 'ai_settings_screen.dart';
 
 class SellerSettingsScreen extends StatefulWidget {
   const SellerSettingsScreen({super.key});
@@ -193,7 +191,7 @@ class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
             borderRadius: BorderRadius.circular(12),
           ),
           child: const Icon(Icons.record_voice_over_rounded,
-              color: _pink, size: 22),
+              color: _pink, size: 22,),
         ),
         title: Text(
           'Voice & Tone',
@@ -340,7 +338,6 @@ class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
                             _hotelLogoUrl,
                             width: 72,
                             height: 72,
-                            fit: BoxFit.cover,
                           )
                         : const Icon(Icons.storefront, color: _pink, size: 32),
               ),
@@ -400,7 +397,6 @@ class _SellerSettingsScreenState extends State<SellerSettingsScreen> {
 
       final croppedFile = await ImageCropper().cropImage(
         sourcePath: pickedFile.path,
-        compressFormat: ImageCompressFormat.jpg,
         compressQuality: 85, // Same as menu items — clarity with compression
         aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1), // Square logo
         uiSettings: [

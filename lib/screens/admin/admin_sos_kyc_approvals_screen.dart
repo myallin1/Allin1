@@ -21,8 +21,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/cloudinary_upload_service.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
 import '../../services/firestore_usage_tracking.dart';
+import '../../widgets/cached_cloud_image.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -285,7 +285,6 @@ class _AdminSosKycApprovalsScreenState extends State<AdminSosKycApprovalsScreen>
                       CloudinaryUploadService.optimizedUrl(photoUrl, width: 128),
                       width: 64,
                       height: 64,
-                      fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
                         width: 64,
                         height: 64,
@@ -559,4 +558,3 @@ class _SosKycApprovalCard extends StatelessWidget {
     properties.add(ObjectFlagProperty<VoidCallback>.has('onCall', onCall));
   }
 }
-

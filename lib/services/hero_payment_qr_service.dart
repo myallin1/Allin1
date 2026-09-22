@@ -29,9 +29,8 @@
 // imported directly (same precedent as services/api_service.dart —
 // dart:io compiles fine for web, it simply must never be executed
 // there, which the kIsWeb guards below ensure).
-import 'dart:io';
-import 'dart:typed_data';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -45,13 +44,14 @@ class HeroPaymentQrService {
   static const String _hiveKey = 'qr_png_base64';
   static const String _nativeFileName = 'hero_payment_qr.png';
 
-  Future<Box> _openBox() async {
-    if (Hive.isBoxOpen(_hiveBoxName)) return Hive.box(_hiveBoxName);
+  Future<Box<dynamic>> _openBox() async {
+    if (Hive.isBoxOpen(_hiveBoxName)) return Hive.box<dynamic>(_hiveBoxName);
     // Idempotent — safe even if another entrypoint already called this
     // (see HiveCache._box()'s identical reasoning).
     await Hive.initFlutter();
-    return Hive.openBox(_hiveBoxName);
+    return Hive.openBox<dynamic>(_hiveBoxName);
   }
+
 
   Future<File> _nativeFile() async {
     final dir = await getApplicationDocumentsDirectory();
@@ -81,7 +81,7 @@ class HeroPaymentQrService {
         return base64Decode(b64);
       } else {
         final file = await _nativeFile();
-        if (!await file.exists()) return null;
+        if (!file.existsSync()) return null;
         return await file.readAsBytes();
       }
     } catch (e) {
@@ -104,7 +104,7 @@ class HeroPaymentQrService {
         await box.delete(_hiveKey);
       } else {
         final file = await _nativeFile();
-        if (await file.exists()) await file.delete();
+        if (file.existsSync()) await file.delete();
       }
     } catch (e) {
       debugPrint('[HeroPaymentQrService] deleteQr failed (non-fatal): $e');

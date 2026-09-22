@@ -21,22 +21,23 @@ import 'screens/hero_login_screen.dart';
 import 'screens/hero_pending_screen.dart';
 import 'screens/hero_register_screen.dart';
 import 'services/affiliate_service.dart';
+import 'services/ai_activation_service.dart';
+import 'services/app_error_log_service.dart';
+import 'services/app_update_gate_service.dart';
+import 'services/chitti/chitti_screen_tracker.dart';
+import 'services/chitti/hero_memory_service.dart';
 import 'services/db_usage_tracker.dart';
+import 'services/guru_overlay_service.dart';
 import 'services/hero_foreground_service.dart';
 import 'services/hero_onboarding_cache.dart';
 import 'services/hero_ride_notification_service.dart';
 import 'services/hero_web_audio_service.dart';
-import 'services/ai_activation_service.dart';
 import 'services/localization_service.dart';
 import 'services/map_service.dart';
 import 'services/migration_gate_service.dart';
 import 'services/theme_service.dart';
-import 'services/app_update_gate_service.dart';
 import 'widgets/branded_loading_screen.dart';
 import 'widgets/migration_notice_overlay.dart';
-import 'services/guru_overlay_service.dart';
-import 'services/chitti/hero_memory_service.dart';
-import 'services/chitti/chitti_screen_tracker.dart';
 
 String? _rideIdFromPushData(Map<String, dynamic> data) {
   for (final key in const <String>[
@@ -229,7 +230,7 @@ class _BootFailedApp extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.wifi_off_rounded,
-                    color: Color(0xFF8F5A78), size: 48),
+                    color: Color(0xFF8F5A78), size: 48,),
                 const SizedBox(height: 16),
                 const Text(
                   "Couldn't connect. Please check your internet and try again.",
@@ -237,15 +238,15 @@ class _BootFailedApp extends StatelessWidget {
                   style: TextStyle(
                       color: Color(0xFF3D1230),
                       fontSize: 14,
-                      fontWeight: FontWeight.w600),
+                      fontWeight: FontWeight.w600,),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: onRetry,
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF4FA3)),
+                      backgroundColor: const Color(0xFFFF4FA3),),
                   child: const Text('Retry',
-                      style: TextStyle(color: Colors.white)),
+                      style: TextStyle(color: Colors.white),),
                 ),
               ],
             ),
@@ -295,7 +296,7 @@ Future<void> _syncFcmTokenForHero(String uid) async {
       await FirebaseFirestore.instance.collection('heroes').doc(uid).set({
         'fcmToken': token,
         'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true),);
       debugPrint('[FCM] Token synced for hero $uid');
     }
   } catch (e) {
@@ -309,13 +310,13 @@ Future<void> _syncFcmTokenForHero(String uid) async {
       FirebaseFirestore.instance.collection('heroes').doc(uid).set({
         'fcmToken': newToken,
         'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)).catchError((Object e) {
+      }, SetOptions(merge: true),).catchError((Object e) {
         debugPrint('[FCM] Token refresh write failed for hero $uid: $e');
       }),
     );
   }, onError: (Object e) {
     debugPrint('[FCM] onTokenRefresh listener error: $e');
-  });
+  },);
 }
 
 void _initGlobalHeroPingListener() {
@@ -357,7 +358,7 @@ void _initGlobalHeroPingListener() {
 
         // De-duplication check
         if (!await HeroRideNotificationService.shouldProcessRideNotification(
-            requestId)) {
+            requestId,)) {
           debugPrint('[GlobalPing] ⏭️ Duplicate ping skipped: $requestId');
           return;
         }
@@ -381,7 +382,6 @@ void _initGlobalHeroPingListener() {
               rideId: requestId,
               data: Map<String, dynamic>.from(pingData),
               playAlertTone: false,
-              showDetails: true,
             );
             debugPrint('[GlobalPing] 🔔 Notification fired for: $requestId');
           } catch (e) {
@@ -400,7 +400,7 @@ void _initGlobalHeroPingListener() {
     // own hero_service_pings listener; this only fires the
     // lock-screen notification so the hero is woken up.
     debugPrint(
-        '[GlobalServicePing] Attaching global hero_service_pings/$uid listener');
+        '[GlobalServicePing] Attaching global hero_service_pings/$uid listener',);
     _globalServicePingSub = FirebaseDatabase.instance
         .ref('hero_service_pings/$uid')
         .onChildAdded
@@ -421,12 +421,12 @@ void _initGlobalHeroPingListener() {
         }
 
         debugPrint(
-            '[GlobalServicePing] ✅ New service ping received: $requestId');
+            '[GlobalServicePing] ✅ New service ping received: $requestId',);
 
         if (!await HeroRideNotificationService.shouldProcessRideNotification(
-            requestId)) {
+            requestId,)) {
           debugPrint(
-              '[GlobalServicePing] ⏭️ Duplicate ping skipped: $requestId');
+              '[GlobalServicePing] ⏭️ Duplicate ping skipped: $requestId',);
           return;
         }
 
@@ -436,11 +436,6 @@ void _initGlobalHeroPingListener() {
               rideId: requestId,
               data: Map<String, dynamic>.from(pingData),
               playAlertTone: false,
-              // FIX (same root cause as the ride-ping listener above): this
-              // global listener wins the dedup race almost every time, so a
-              // quiet showDetails:false here meant the hero effectively never
-              // saw the 3-button notification for service requests either.
-              showDetails: true,
               pushType: 'service_request',
               title: 'New Service Request',
               channelDescription:
@@ -449,7 +444,7 @@ void _initGlobalHeroPingListener() {
               emptyBodyFallback: 'Tap ACCEPT to open the request.',
             );
             debugPrint(
-                '[GlobalServicePing] 🔔 Notification fired for: $requestId');
+                '[GlobalServicePing] 🔔 Notification fired for: $requestId',);
           } catch (e) {
             debugPrint('[GlobalServicePing] Notification error: $e');
           }
@@ -493,8 +488,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await HeroRideNotificationService.showRideAssigned(
       rideId: rideId,
       data: message.data,
-      playAlertTone: true,
-      showDetails: true,
     );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(kPendingHeroRideIdKey, rideId);
@@ -510,8 +503,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       await HeroRideNotificationService.showRideAssigned(
         rideId: requestId,
         data: message.data,
-        playAlertTone: true,
-        showDetails: true,
         pushType: 'service_request',
         title: 'New Service Request',
         channelDescription:
@@ -546,6 +537,42 @@ void main() async {
       options.tracesSampleRate = 1.0;
     },
     appRunner: () async {
+      final prevHeroFlutterOnError = FlutterError.onError;
+      FlutterError.onError = (details) {
+        debugPrint('[main_hero] Flutter error: ${details.exceptionAsString()}');
+        AppErrorLogService.recordFlutterError(details, appVariant: 'hero');
+        prevHeroFlutterOnError?.call(details);
+      };
+
+      final prevHeroPlatformOnError = PlatformDispatcher.instance.onError;
+      PlatformDispatcher.instance.onError = (error, stack) {
+        debugPrint('[main_hero] PlatformDispatcher error: $error');
+        AppErrorLogService.recordPlatformError(
+          error,
+          stack,
+          appVariant: 'hero',
+        );
+        try {
+          prevHeroPlatformOnError?.call(error, stack);
+        } catch (_) {}
+        return true;
+      };
+
+      ErrorWidget.builder = (details) {
+        return const Material(
+          color: Colors.transparent,
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(12),
+              child: Text(
+                'Temporarily unavailable',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+          ),
+        );
+      };
+
       // FIX (task #108, jet-speed startup / video-as-buffer): see
       // _BootLoadingApp's comment above -- this must run before anything
       // Firebase/Hive-related. videoDone completes when app_splash.mp4
@@ -574,7 +601,7 @@ void main() async {
           final refType = Uri.base.queryParameters['rtype'];
           if (refType != null && refType.isNotEmpty) {
             await earlyPrefs.setString(
-                AffiliateService.kPendingTypeKey, refType);
+                AffiliateService.kPendingTypeKey, refType,);
           }
         }
       }
@@ -583,13 +610,13 @@ void main() async {
       if (!hasSeenSplashVideoEver) {
         runApp(_BootLoadingApp(onVideoFinished: () {
           if (!videoDone.isCompleted) videoDone.complete();
-        }));
+        },),);
       } else {
         videoDone.complete();
       }
 
       FirebaseMessaging.onBackgroundMessage(
-          _firebaseMessagingBackgroundHandler);
+          _firebaseMessagingBackgroundHandler,);
 
       // FIX (black/white-screen-stuck audit, per Nizam's request): retry
       // a few times with a short delay (covers the common transient
@@ -613,7 +640,7 @@ void main() async {
       }
       if (!firebaseReady) {
         debugPrint(
-            '[main_hero] Fatal: Firebase init failed after retries: $lastFirebaseError');
+            '[main_hero] Fatal: Firebase init failed after retries: $lastFirebaseError',);
         runApp(const _BootFailedApp(onRetry: main));
         return;
       }
@@ -1013,7 +1040,7 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
         if (_onboardingCacheLoaded) {
           if (_cachedOnboardingStatus == 'approved') {
             return _buildFadingChild(
-                'hero-dashboard', const HeroDashboardShell());
+                'hero-dashboard', const HeroDashboardShell(),);
           }
           if (_cachedOnboardingStatus == 'pending') {
             return _buildFadingChild('hero-pending', const HeroPendingScreen());
@@ -1123,7 +1150,7 @@ class _HeroSetupGateState extends State<_HeroSetupGate> {
                       SetOptions(merge: true),
                     ).catchError((Object e) {
                       debugPrint(
-                          '[HeroSetupGate] self-heal isSetupComplete failed: $e');
+                          '[HeroSetupGate] self-heal isSetupComplete failed: $e',);
                     }),
                   );
 

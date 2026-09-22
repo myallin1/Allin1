@@ -14,38 +14,38 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
+import '../../app_navigator.dart' show chittiRouteObserver;
 import '../../config/fare_rates.dart';
 import '../../config/ride_catalog.dart';
 import '../../models/ride_model.dart';
-// GUEST MODE (Aug 11 2026): requireRealAuth() guard on the submit action.
-import '../../app_navigator.dart' show chittiRouteObserver;
+import '../../services/app_minimizer_service.dart';
 import '../../services/auth_prompt_service.dart';
-import '../../services/chitti_memory_service.dart';
 // Phone lookups consolidated here (Aug 11 2026) — single source of truth.
 import '../../services/auth_service.dart';
-// INSTANT-SEED (Aug 11 2026): remembers the last confirmed pickup.
-import '../../services/pickup_memory_service.dart';
-import '../../services/theme_service.dart';
-import '../../widgets/cached_cloud_image.dart';
-// INSTANT-SEED: the app's existing drag-a-pin picker, reused for the
-// manual pickup path instead of adding tap plumbing to the shared map.
-import '../location_picker_screen.dart';
-import '../../services/app_minimizer_service.dart';
+import '../../services/chitti_memory_service.dart';
 import '../../services/city_service.dart';
 import '../../services/localization_service.dart';
 import '../../services/location_service.dart';
 import '../../services/map_service.dart';
+import '../../services/map_simulation_service.dart';
+// INSTANT-SEED (Aug 11 2026): remembers the last confirmed pickup.
+import '../../services/pickup_memory_service.dart';
 import '../../services/recent_places_service.dart';
-import '../../widgets/cancellation_reason_sheet.dart';
+import '../../services/theme_service.dart';
 import '../../services/usage_tracking_service.dart';
 import '../../widgets/allin1_map_widget.dart';
-import '../../services/map_simulation_service.dart';
+import '../../widgets/cached_cloud_image.dart';
+import '../../widgets/cached_tile_provider.dart';
+import '../../widgets/cancellation_reason_sheet.dart';
 import '../../widgets/server_busy_dialog.dart';
 import '../../widgets/vehicle_selection_bottom_sheet.dart';
+// INSTANT-SEED: the app's existing drag-a-pin picker, reused for the
+// manual pickup path instead of adding tap plumbing to the shared map.
+import '../location_picker_screen.dart';
 import '../payment_screen.dart';
 import 'ride_search_screen.dart';
 import 'ride_tracking_screen.dart';
-import '../../widgets/cached_tile_provider.dart';
 
 // Approximate Erode road paths aligned to major corridors such as
 // Brough Road, EVN Road, and Perundurai Road for ambient traffic.
@@ -219,7 +219,7 @@ class BikeBookingScreen extends StatefulWidget {
     super.debugFillProperties(properties);
     properties.add(StringProperty('initialCategory', initialCategory));
     properties.add(DiagnosticsProperty<Map<String, dynamic>?>(
-        'initialDropLocation', initialDropLocation));
+        'initialDropLocation', initialDropLocation,),);
   }
 }
 
@@ -1268,7 +1268,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         action: SnackBarAction(
           label: 'Set now',
           textColor: Colors.white,
-          onPressed: () => _openManualPickupPicker(),
+          onPressed: _openManualPickupPicker,
         ),
       ),
     );
@@ -1714,7 +1714,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       'resultCount': resultCount,
       'userId': uid,
       'createdAt': FieldValue.serverTimestamp(),
-    }).catchError((Object e) {
+    }).then<void>((_) {}).catchError((Object e) {
       debugPrint('[BikeBooking] location_search_logs write failed: $e');
     });
   }
@@ -2120,7 +2120,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
         if (!mounted) return;
         showSignInRequiredSnack(
           context,
-          message: "Signed in — tap Book once more to confirm your ride",
+          message: 'Signed in — tap Book once more to confirm your ride',
         );
         return;
       }
@@ -2189,7 +2189,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
       // failure is swallowed inside the service itself.
       unawaited(UsageTrackingService.instance.trackVehicleBooked(vehicleType));
       unawaited(
-          UsageTrackingService.instance.trackPlaceSearched(pickupAddress));
+          UsageTrackingService.instance.trackPlaceSearched(pickupAddress),);
       unawaited(UsageTrackingService.instance.trackPlaceSearched(dropAddress));
       unawaited(UsageTrackingService.instance.trackServiceUsed('taxi'));
 
@@ -2294,7 +2294,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
           'recipientPhone': recipientPhone,
       }).then((_) {
         debugPrint(
-            '🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}');
+            '🔥 [RIDE CREATION] Firestore document created successfully! Doc ID: ${rideRef.id}',);
       }).catchError((e) {
         debugPrint('[BikeBookingScreen] Background ride creation failed: $e');
         if (mounted) {
@@ -2556,7 +2556,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                   Positioned(
                     right: 16,
                     bottom: 275, // Above the my location button
-                    child: Container(
+                    child: DecoratedBox(
                       decoration: BoxDecoration(
                         boxShadow: [
                           BoxShadow(
@@ -2572,12 +2572,12 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                         backgroundColor: Colors.white,
                         elevation: 0,
                         icon: const Icon(Icons.location_on_rounded,
-                            color: _accentOrange, size: 20),
+                            color: _accentOrange, size: 20,),
                         label: Text('Set Pin manually',
                             style: GoogleFonts.outfit(
                                 color: _accentOrange,
                                 fontWeight: FontWeight.w600,
-                                fontSize: 13)),
+                                fontSize: 13,),),
                       ),
                     ),
                   ),
@@ -2746,7 +2746,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                             },
                             style: OutlinedButton.styleFrom(
                               foregroundColor: _accentOrange,
-                              side: BorderSide(color: _accentOrange),
+                              side: const BorderSide(color: _accentOrange),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 18,
                                 vertical: 14,
@@ -3032,7 +3032,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                       // CHANGED (Nizam: "photo theme ah innum vera level la
                       // set pannlam") — same shadow+ring elevated-tile
                       // treatment used app-wide now.
-                      return Container(
+                      return DecoratedBox(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: Colors.white, width: 1.5),
@@ -3040,20 +3040,19 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                             BoxShadow(
                                 color: Colors.black.withValues(alpha: 0.18),
                                 blurRadius: 5,
-                                offset: const Offset(0, 2)),
+                                offset: const Offset(0, 2),),
                           ],
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8.5),
                           child: CachedCloudImage(
                             photoUrl,
-                            fit: BoxFit.cover,
                             cacheWidth: 136,
                             errorWidget: Image.asset(
                               assetPath,
                               fit: BoxFit.contain,
                               errorBuilder: (_, __, ___) => Icon(fallbackIcon,
-                                  color: _accentOrange, size: 30),
+                                  color: _accentOrange, size: 30,),
                             ),
                           ),
                         ),
@@ -3070,7 +3069,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                           assetPath,
                           fit: BoxFit.contain,
                           errorBuilder: (_, __, ___) => Icon(fallbackIcon,
-                              color: _accentOrange, size: 30),
+                              color: _accentOrange, size: 30,),
                         ),
                       );
                     }
@@ -3083,7 +3082,7 @@ class _BikeBookingScreenState extends State<BikeBookingScreen>
                         size: 30,
                       ),
                     );
-                  }),
+                  },),
                 ),
                 const SizedBox(height: 4),
                 AnimatedContainer(

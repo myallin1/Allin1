@@ -7,9 +7,8 @@
 // behaviours pinned hardest here are the ones that decide that —
 // tolerating the formatting models actually produce, and refusing
 // anything it cannot read cleanly rather than half-guessing.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/services/chitti/chitti_screen_loop.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('parsing what models really return', () {
@@ -109,7 +108,7 @@ void main() {
       }
     });
 
-    test('a confirmation stop reports the gate\'s own reason', () {
+    test("a confirmation stop reports the gate's own reason", () {
       const result = ChittiLoopResult(
         ending: ChittiLoopEnding.awaitingConfirmation,
         stepsTaken: 3,

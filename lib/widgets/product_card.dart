@@ -8,8 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:erode_superapp/services/cloudinary_upload_service.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../services/cloudinary_upload_service.dart';
+import 'cached_cloud_image.dart';
 
 // ── Brand palette (Aug 20 2026 — Global Food Theme Overhaul) ───────
 // Recolored from the old dark card (0xFF1A1A2A) to match the seller
@@ -40,7 +40,6 @@ class ProductCard extends StatelessWidget {
   Widget _buildDishImage(String image, {required bool isRound}) {
     final img = CachedCloudImage(
       CloudinaryUploadService.foodImageUrl(image, width: 400),
-      fit: BoxFit.cover,
       errorWidget: Center(
         child: SvgPicture.string(
           FluentEmojiFlat.hamburger,
@@ -168,7 +167,7 @@ class ProductCard extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                '₹${offerPrice!.toStringAsFixed(0)}',
+                                '₹${offerPrice.toStringAsFixed(0)}',
                                 style: GoogleFonts.outfit(
                                   fontSize: 14,
                                   color: _kPink,
@@ -231,4 +230,3 @@ class ProductCard extends StatelessWidget {
         .add(ObjectFlagProperty<VoidCallback>.has('onAddToCart', onAddToCart));
   }
 }
-

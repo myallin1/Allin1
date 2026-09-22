@@ -25,10 +25,10 @@ import '../../services/pwa_cache_platform_stub.dart'
 import '../../services/update_service.dart';
 import '../../services/web_version_checker.dart';
 import '../../widgets/download_app_banner.dart';
+import '../invite_friends_screen.dart';
 import 'hero_earnings_screen.dart';
 import 'hero_incomplete_tasks_screen.dart';
 import 'hero_settings_screen.dart';
-import '../invite_friends_screen.dart';
 
 class HeroSideDrawer extends StatefulWidget {
   const HeroSideDrawer({super.key});
@@ -230,7 +230,7 @@ class _HeroSideDrawerState extends State<HeroSideDrawer> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          user?.displayName?.trim().isNotEmpty == true
+                          user?.displayName?.trim().isNotEmpty ?? false
                               ? user!.displayName!
                               : 'Hero',
                           style: const TextStyle(
@@ -402,9 +402,9 @@ class _HeroSideDrawerState extends State<HeroSideDrawer> {
             ListTile(
               leading: const Icon(Icons.group_add_rounded, color: _pink),
               title: const Text('Refer a Hero',
-                  style: TextStyle(color: _text, fontWeight: FontWeight.w600)),
+                  style: TextStyle(color: _text, fontWeight: FontWeight.w600),),
               subtitle: const Text('Share your QR / link and grow the team',
-                  style: TextStyle(color: _muted, fontSize: 11)),
+                  style: TextStyle(color: _muted, fontSize: 11),),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(

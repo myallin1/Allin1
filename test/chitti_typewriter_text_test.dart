@@ -7,9 +7,9 @@
 // break: showing nothing until the animation finishes (instead of a
 // progressive reveal), and replaying the animation every time the
 // surrounding list rebuilds instead of running once.
+import 'package:erode_superapp/widgets/chitti_typewriter_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:erode_superapp/widgets/chitti_typewriter_text.dart';
 
 void main() {
   Widget host(Widget child) =>
@@ -23,7 +23,7 @@ void main() {
         style: TextStyle(),
         animate: false,
       ),
-    ));
+    ),);
     final text = tester.widget<Text>(find.byType(Text));
     expect(text.data, 'Your order is on the way.');
   });
@@ -35,7 +35,7 @@ void main() {
         'Hello boss!',
         style: TextStyle(),
       ),
-    ));
+    ),);
     // First frame: nothing revealed yet.
     var text = tester.widget<Text>(find.byType(Text));
     expect(text.data!.length, lessThan('Hello boss!'.length));
@@ -49,7 +49,7 @@ void main() {
   testWidgets('an empty string never throws', (tester) async {
     await tester.pumpWidget(host(
       const ChittiTypewriterText('', style: TextStyle()),
-    ));
+    ),);
     await tester.pump(const Duration(milliseconds: 1200));
     final text = tester.widget<Text>(find.byType(Text));
     expect(text.data, '');
@@ -99,10 +99,10 @@ void main() {
 
       await tester.pumpWidget(host(Column(
         children: [
-          ChittiTypewriterText(key: const ValueKey('s'), short, style: const TextStyle()),
+          const ChittiTypewriterText(key: ValueKey('s'), short, style: TextStyle()),
           ChittiTypewriterText(key: const ValueKey('l'), long, style: const TextStyle()),
         ],
-      )));
+      ),),);
 
       // Long enough for the short reply to finish, nowhere near enough
       // for 200 characters at a natural pace.
@@ -118,3 +118,4 @@ void main() {
     });
   });
 }
+

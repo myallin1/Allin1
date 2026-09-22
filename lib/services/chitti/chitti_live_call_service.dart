@@ -227,7 +227,7 @@ class ChittiLiveCallService {
       }
       controller.add(
         ChittiLiveCallState.fromRtdbData(
-            callId, {...fields, 'liveTranscript': transcript}),
+            callId, {...fields, 'liveTranscript': transcript},),
       );
     }
 
@@ -266,7 +266,7 @@ class ChittiLiveCallService {
           }
           fields['status'] = event.snapshot.value;
           emit();
-        }));
+        }),);
 
         void onScalarChange(DatabaseEvent event) {
           final key = event.snapshot.key;
@@ -285,10 +285,10 @@ class ChittiLiveCallService {
           if (key == null) return;
           transcript[key] = event.snapshot.value.toString();
           emit();
-        }));
+        }),);
       } catch (e) {
         debugPrint(
-            '[ChittiLiveCall] watchCall($callId) failed to initialize: $e');
+            '[ChittiLiveCall] watchCall($callId) failed to initialize: $e',);
         initialized = true;
         ended = true;
         emit();
@@ -325,7 +325,7 @@ class ChittiLiveCallService {
       controller.add(
         cache.values
             .where(
-                (s) => s.status == 'ringing' || s.status == 'chitti_handling')
+                (s) => s.status == 'ringing' || s.status == 'chitti_handling',)
             .toList(),
       );
     }
@@ -356,7 +356,7 @@ class ChittiLiveCallService {
         }
       } catch (e) {
         debugPrint(
-            '[ChittiLiveCall] watchIncomingRingingCalls() initial fetch failed: $e');
+            '[ChittiLiveCall] watchIncomingRingingCalls() initial fetch failed: $e',);
       }
       emit();
 
@@ -367,7 +367,7 @@ class ChittiLiveCallService {
         if (key == null) return;
         cache.remove(key);
         emit();
-      }));
+      }),);
     }();
 
     controller.onCancel = () async {
@@ -392,7 +392,7 @@ class ChittiLiveCallService {
 
   /// Admin assigns the call to Chitti AI automated receptionist
   Future<void> answerCallChitti(String callId,
-      {required String adminId}) async {
+      {required String adminId,}) async {
     await _calls.child(callId).update({
       'status': 'chitti_handling',
       'handlingMode': 'chitti',
@@ -487,7 +487,7 @@ class ChittiLiveCallService {
     // acted on it yet) — any state written by an admin action in the
     // meantime is left alone.
     try {
-      await _calls.child(callId).runTransaction((Object? current) {
+      await _calls.child(callId).runTransaction((current) {
         final data =
             current is Map ? Map<Object?, Object?>.from(current) : null;
         final status = data?['status'] as String?;

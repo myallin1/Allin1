@@ -16,7 +16,7 @@ import 'dart:async' show unawaited;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../../widgets/cached_cloud_image.dart';
 
 const Color _bg = Color(0xFF0A0A1A);
 const Color _surface = Color(0xFF12121E);
@@ -181,7 +181,7 @@ class _ReportRow extends StatelessWidget {
           Row(
             children: [
               Icon(isFinding ? Icons.warning_amber_rounded : Icons.check_circle_outline_rounded,
-                  color: isFinding ? _red : _green, size: 18),
+                  color: isFinding ? _red : _green, size: 18,),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -207,7 +207,6 @@ class _ReportRow extends StatelessWidget {
               child: CachedCloudImage(
                 screenshotUrl,
                 height: 140,
-                fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => const SizedBox.shrink(),
               ),
             ),
@@ -217,4 +216,3 @@ class _ReportRow extends StatelessWidget {
     );
   }
 }
-

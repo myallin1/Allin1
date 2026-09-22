@@ -280,7 +280,7 @@ class _SkillCard extends StatelessWidget {
                       BoxShadow(
                           color: Colors.black.withValues(alpha: 0.18),
                           blurRadius: 6,
-                          offset: const Offset(0, 3)),
+                          offset: const Offset(0, 3),),
                     ],
                   ),
                   child: ClipRRect(
@@ -289,15 +289,14 @@ class _SkillCard extends StatelessWidget {
                       photoUrl,
                       width: 52,
                       height: 52,
-                      fit: BoxFit.cover,
                       cacheWidth: 208,
-                      errorWidget: Container(
+                      errorWidget: DecoratedBox(
                         decoration: BoxDecoration(
                           color: skill.color.withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: SvgPicture.string(skill.svgIcon,
-                            width: 30, height: 30),
+                            width: 30, height: 30,),
                       ),
                     ),
                   ),
@@ -315,7 +314,7 @@ class _SkillCard extends StatelessWidget {
                 // customer needs to tell these apart at a glance too.
                 child: SvgPicture.string(skill.svgIcon, width: 30, height: 30),
               );
-            }),
+            },),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -486,7 +485,7 @@ class _SkillBookingSheetState extends State<_SkillBookingSheet> {
     // first time a customer's GPS permission is off.
     if (_lat == null || _lng == null) {
       _toast(
-          'Please set your location so nearby ${widget.skill.title}s can be found');
+          'Please set your location so nearby ${widget.skill.title}s can be found',);
       return;
     }
     if (!await requireRealAuth(
@@ -648,13 +647,13 @@ class _SkillBookingSheetState extends State<_SkillBookingSheet> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(13),
                                   border: Border.all(
-                                      color: Colors.white, width: 1.2),
+                                      color: Colors.white, width: 1.2,),
                                   boxShadow: [
                                     BoxShadow(
                                         color: Colors.black
                                             .withValues(alpha: 0.18),
                                         blurRadius: 5,
-                                        offset: const Offset(0, 2)),
+                                        offset: const Offset(0, 2),),
                                   ],
                                 ),
                                 child: ClipRRect(
@@ -663,16 +662,15 @@ class _SkillBookingSheetState extends State<_SkillBookingSheet> {
                                     photoUrl,
                                     width: 44,
                                     height: 44,
-                                    fit: BoxFit.cover,
                                     cacheWidth: 176,
-                                    errorWidget: Container(
+                                    errorWidget: DecoratedBox(
                                       decoration: BoxDecoration(
                                         color:
                                             skill.color.withValues(alpha: 0.16),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: SvgPicture.string(skill.svgIcon,
-                                          width: 24, height: 24),
+                                          width: 24, height: 24,),
                                     ),
                                   ),
                                 ),
@@ -691,7 +689,7 @@ class _SkillBookingSheetState extends State<_SkillBookingSheet> {
                                 height: 24,
                               ),
                             );
-                          }),
+                          },),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(

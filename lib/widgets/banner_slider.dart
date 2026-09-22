@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import 'cached_cloud_image.dart';
 
 /// A text-only promo slide (e.g. "Internet Offers") rendered as a
 /// gradient card, mixed into the same auto-scrolling PageView as the
-/// image slides below. Kept separate from [imageUrls] so callers don't
+/// image slides below. Kept separate from `imageUrls` so callers don't
 /// need a hosted image just to advertise a text-only offer.
 class BannerTextSlide {
   final String title;
@@ -167,7 +167,6 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
               borderRadius: BorderRadius.circular(18),
               child: CachedCloudImage(
                 widget.imageUrls[imageIndex],
-                fit: BoxFit.cover,
                 errorWidget: const Center(
                   child: Icon(Icons.broken_image_rounded, color: Colors.grey),
                 ),
@@ -179,4 +178,3 @@ class _BannerAdsSliderState extends State<BannerAdsSlider> {
     );
   }
 }
-

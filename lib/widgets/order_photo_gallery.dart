@@ -13,7 +13,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/cloudinary_upload_service.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import 'cached_cloud_image.dart';
 
 /// Compact horizontal strip of thumbnails, tap any one to open the
 /// full-screen viewer. Renders nothing if [imageUrls] is empty, so
@@ -81,7 +81,6 @@ class OrderPhotoGallery extends StatelessWidget {
                   ),
                   width: thumbnailSize,
                   height: thumbnailSize,
-                  fit: BoxFit.cover,
                   placeholder: Container(
                     width: thumbnailSize,
                     height: thumbnailSize,
@@ -202,7 +201,7 @@ class _OrderPhotoViewerState extends State<_OrderPhotoViewer> {
 /// Reads `details['listImageUrls']` (new, multi-image field) with a
 /// fallback to the older singular `details['listImageUrl']` so orders
 /// placed before this feature shipped still show their one photo.
-List<String> orderPhotoUrlsFromDetails(Map details) {
+List<String> orderPhotoUrlsFromDetails(Map<String, dynamic> details) {
   final raw = details['listImageUrls'];
   if (raw is List) {
     return raw.whereType<String>().where((u) => u.isNotEmpty).toList();
@@ -211,4 +210,3 @@ List<String> orderPhotoUrlsFromDetails(Map details) {
   if (single != null && single.isNotEmpty) return [single];
   return const [];
 }
-

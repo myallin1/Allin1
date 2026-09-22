@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'map_provider.dart';
@@ -61,9 +62,10 @@ class OSMProvider extends MapProvider {
       }
       return [];
     } catch (e) {
-      print('❌ OSM Search error: $e');
+      debugPrint('❌ OSM Search error: $e');
       return [];
     }
+
   }
 
   // [center] biases/restricts the search box around a specific point —
@@ -149,9 +151,10 @@ class OSMProvider extends MapProvider {
           .whereType<Map<String, dynamic>>()
           .toList();
     } catch (e) {
-      print('❌ OSM Erode Search error: $e');
+      debugPrint('❌ OSM Erode Search error: $e');
       return [];
     }
+
   }
 
   Future<Map<String, dynamic>?> reverseGeocode(LatLng point) async {
@@ -202,7 +205,7 @@ class OSMProvider extends MapProvider {
         'type': 'reverse',
       };
     } catch (e) {
-      print('❌ OSM Reverse Geocode error: $e');
+      debugPrint('❌ OSM Reverse Geocode error: $e');
       return null;
     }
   }
@@ -249,9 +252,10 @@ class OSMProvider extends MapProvider {
       }
       return null;
     } catch (e) {
-      print('❌ OSM Route error: $e');
+      debugPrint('❌ OSM Route error: $e');
       return null;
     }
+
   }
 
   @override

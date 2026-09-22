@@ -11,11 +11,10 @@
 //      StateError, instead of silently overwriting the newer save.
 // ================================================================
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/models/mobile_models.dart';
 import 'package:erode_superapp/services/mobile_listing_service.dart';
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   const sellerId = 'seller1';

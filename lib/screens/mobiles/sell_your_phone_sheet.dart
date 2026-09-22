@@ -109,7 +109,7 @@ class _SellYourPhoneSheetState extends State<_SellYourPhoneSheet> {
       return;
     }
     if (!await requireRealAuth(context,
-        reason: 'Sign in to sell your phone')) {
+        reason: 'Sign in to sell your phone',)) {
       return;
     }
     final user = FirebaseAuth.instance.currentUser;
@@ -192,13 +192,13 @@ class _SellYourPhoneSheetState extends State<_SellYourPhoneSheet> {
       // shop has already seen their cracked screen.
       if (photoAttemptedButFailed) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
+          const SnackBar(
+            content: Text(
               'Enquiry sent — but your photo could not be uploaded. '
               'Our team will ask you for it.',
             ),
             backgroundColor: kMobRed,
-            duration: const Duration(seconds: 6),
+            duration: Duration(seconds: 6),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -238,7 +238,7 @@ class _SellYourPhoneSheetState extends State<_SellYourPhoneSheet> {
         maxChildSize: 0.95,
         expand: false,
         builder: (context, scrollController) {
-          return Container(
+          return DecoratedBox(
             decoration: const BoxDecoration(
               color: kMobBg,
               borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -275,17 +275,17 @@ class _SellYourPhoneSheetState extends State<_SellYourPhoneSheet> {
                       ),
                       const SizedBox(height: 18),
                       _field(_modelCtrl, 'Phone model *',
-                          'e.g. iPhone 12 128GB'),
+                          'e.g. iPhone 12 128GB',),
                       _buildGradePicker(),
                       _field(_ageCtrl, 'How old is it?', 'e.g. 2 years'),
                       _field(_expectedPriceCtrl, 'Expected price (₹)',
                           'Optional',
-                          keyboard: TextInputType.number),
+                          keyboard: TextInputType.number,),
                       _field(_notesCtrl, 'Anything else?',
                           'Bill/box available, any damage…',
-                          maxLines: 3),
+                          maxLines: 3,),
                       _field(_contactCtrl, 'Contact number *', '9XXXXXXXXX',
-                          keyboard: TextInputType.phone),
+                          keyboard: TextInputType.phone,),
                       _buildPhotoPicker(),
                       const SizedBox(height: 22),
                       SizedBox(
@@ -353,7 +353,7 @@ class _SellYourPhoneSheetState extends State<_SellYourPhoneSheet> {
                 onTap: () => setState(() => _grade = g),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                      horizontal: 14, vertical: 8,),
                   decoration: BoxDecoration(
                     color: active ? kMobGold : kMobSurface,
                     borderRadius: BorderRadius.circular(20),
@@ -409,10 +409,10 @@ class _SellYourPhoneSheetState extends State<_SellYourPhoneSheet> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.add_a_photo_outlined,
-                            color: kMobMuted, size: 26),
+                            color: kMobMuted, size: 26,),
                         SizedBox(height: 6),
                         Text('Tap to add a photo',
-                            style: TextStyle(color: kMobMuted, fontSize: 12)),
+                            style: TextStyle(color: kMobMuted, fontSize: 12),),
                       ],
                     )
                   : Image.memory(_photoBytes!, fit: BoxFit.cover),

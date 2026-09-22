@@ -102,7 +102,7 @@ class LocationService {
       if (kIsWeb) {
         try {
           debugPrint(
-              '[LocationService] retrying with reduced accuracy (web fallback)...');
+              '[LocationService] retrying with reduced accuracy (web fallback)...',);
           _currentPosition = await Geolocator.getCurrentPosition(
             locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.medium,
@@ -224,8 +224,7 @@ class LocationService {
         return null;
       }
 
-      _currentPosition = await Geolocator.getLastKnownPosition();
-      return _currentPosition;
+      return _currentPosition = await Geolocator.getLastKnownPosition();
     } catch (e) {
       return null;
     }

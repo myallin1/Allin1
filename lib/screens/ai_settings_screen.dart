@@ -170,7 +170,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Your chats, Chitti\'s memory of you and your settings are saved '
+          "Your chats, Chitti's memory of you and your settings are saved "
           '— to your own Google Drive, or as a file you keep yourself. '
           'Change phone, restore, and Chitti picks up where you left off. '
           'Your wallet stays safe on our servers and is never in either.',
@@ -261,7 +261,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Save a backup file to your phone\'s storage — no Google '
+          "Save a backup file to your phone's storage — no Google "
           'account needed. Works offline; share it to keep a copy '
           'anywhere you like.',
           style: GoogleFonts.outfit(
@@ -576,7 +576,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              "No male voice showed up above? Some phones (often "
+              'No male voice showed up above? Some phones (often '
               'Samsung) ship a TTS engine with a smaller voice set. Go '
               'to Settings → General management → Text-to-speech → '
               'Preferred engine, switch it to "Google Text-to-speech", '
@@ -895,7 +895,7 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'This key activates YOUR personal AI superhero — free to generate from Groq\'s console, stored securely on this device, never shared with anyone but Groq\'s own API.',
+                        "This key activates YOUR personal AI superhero — free to generate from Groq's console, stored securely on this device, never shared with anyone but Groq's own API.",
                         style: GoogleFonts.outfit(
                           color: const Color(0xFF8A4E72),
                           fontSize: 12.5,

@@ -17,9 +17,9 @@
 // the exact opposite of the continuity the feature exists for.
 import 'dart:io';
 
+import 'package:erode_superapp/services/chitti_chat_history_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-import 'package:erode_superapp/services/chitti_chat_history_service.dart';
 
 void main() {
   // Hive needs a home in a unit test; it does not need a device.
@@ -61,7 +61,7 @@ void main() {
 
   test('the RECENT end survives, not the oldest', () async {
     const extra = 40;
-    final total = ChittiChatHistoryService.maxSavedMessages + extra;
+    const total = ChittiChatHistoryService.maxSavedMessages + extra;
     await ChittiChatHistoryService.saveChat(messages(total));
     final loaded = await ChittiChatHistoryService.loadSavedChat();
 

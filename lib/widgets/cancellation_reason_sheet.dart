@@ -34,7 +34,6 @@ Future<String?> showCancellationReasonSheet(BuildContext context) {
   return showModalBottomSheet<String>(
     context: context,
     backgroundColor: _bg,
-    isDismissible: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
@@ -124,7 +123,7 @@ class _CancellationReasonSheetState extends State<_CancellationReasonSheet> {
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text("Don't cancel",
-                  style: TextStyle(color: _muted, fontWeight: FontWeight.w600)),
+                  style: TextStyle(color: _muted, fontWeight: FontWeight.w600),),
             ),
           ],
         ),
@@ -201,7 +200,7 @@ class _OtherRow extends StatelessWidget {
         children: [
           const Text('Other',
               style: TextStyle(
-                  color: _text, fontSize: 13.5, fontWeight: FontWeight.w600)),
+                  color: _text, fontSize: 13.5, fontWeight: FontWeight.w600,),),
           const SizedBox(height: 8),
           TextField(
             controller: controller,

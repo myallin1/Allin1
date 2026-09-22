@@ -65,8 +65,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/mobile_models.dart' show youtubeVideoId;
 import '../screens/mobiles/listing_video_player.dart'
     show showPremiumVideoModal, VideoThumbnail;
-import '../services/video_warmup_service.dart';
 import '../services/firestore_usage_tracking.dart';
+import '../services/video_warmup_service.dart';
 
 /// Who a tutorial is for. Stored as the raw string in Firestore so an
 /// admin can type it, and matched case-insensitively on read.

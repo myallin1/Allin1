@@ -64,22 +64,23 @@ class HeroMemoryService {
   static List<Map<String, dynamic>> _moods = <Map<String, dynamic>>[];
   static List<Map<String, dynamic>> _highlights = <Map<String, dynamic>>[];
 
-  static Future<Box> _box() async {
-    if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);
+  static Future<Box<dynamic>> _box() async {
+    if (Hive.isBoxOpen(_boxName)) return Hive.box<dynamic>(_boxName);
     // Idempotent, same as every other Chitti Hive box in this codebase
     // — safe even if another entrypoint already called this.
     await Hive.initFlutter();
-    return Hive.openBox(_boxName);
+    return Hive.openBox<dynamic>(_boxName);
   }
 
-  static List<Map<String, dynamic>> _readList(Box box, String key) {
+  static List<Map<String, dynamic>> _readList(Box<dynamic> box, String key) {
     final raw = box.get(key);
     if (raw is! List) return <Map<String, dynamic>>[];
     return raw
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
+        .whereType<Map<dynamic, dynamic>>()
+        .map(Map<String, dynamic>.from)
         .toList();
   }
+
 
   /// Call once at boot (after Hive.initFlutter()), same contract as
   /// ChittiOrderMemoryService.preload(). Safe to skip — callers just
@@ -156,7 +157,7 @@ class HeroMemoryService {
   /// ChittiBuddy.isSafeMoment being pessimistic).
   static final RegExp _lowMoodWords = RegExp(
     r'\b(tired|exhausted|not feeling well|unmotivated|no rides|no ride|'
-    r'no work|slow day|bad day|sad|frustrated|give up|giving up|fed up|'
+    'no work|slow day|bad day|sad|frustrated|give up|giving up|fed up|'
     r'losing money|loss|struggling|difficult|hard day)\b|'
     '(கஷ்டமா|சோர்வா|வேலை இல்ல|மனசு இல்ல|நஷ்டம்|கஷ்டம்)',
     caseSensitive: false,
@@ -265,7 +266,7 @@ class HeroMemoryService {
     if (lastMood != null) {
       lines.add(
         lastMood == 'low'
-            ? "Mood: the hero recently sounded discouraged or tired — "
+            ? 'Mood: the hero recently sounded discouraged or tired — '
                 'lead with encouragement, not just numbers.'
             : 'Mood: the hero recently sounded upbeat.',
       );
@@ -276,9 +277,9 @@ class HeroMemoryService {
     }
 
     if (lines.isEmpty) return '';
-    return "Hero Profile (compact, local-only memory — use this to sound "
-        "like someone who actually remembers this hero, not a generic "
-        "assistant; never invent numbers beyond what is given here):\n"
+    return 'Hero Profile (compact, local-only memory — use this to sound '
+        'like someone who actually remembers this hero, not a generic '
+        'assistant; never invent numbers beyond what is given here):\n'
         '${lines.join('\n')}';
   }
 
@@ -324,7 +325,7 @@ class HeroMemoryService {
 
     if (lastMood == 'low') {
       parts.add("I know it's been a tough stretch — I'm keeping an eye on "
-          'your numbers so you don\'t have to.');
+          "your numbers so you don't have to.");
     }
 
     if (parts.isEmpty) return null;

@@ -132,17 +132,17 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
       ),
       builder: (sheetContext) => Padding(
         padding: EdgeInsets.fromLTRB(
-            18, 18, 18, MediaQuery.of(sheetContext).viewInsets.bottom + 18),
+            18, 18, 18, MediaQuery.of(sheetContext).viewInsets.bottom + 18,),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('What did he ask?',
                 style: GoogleFonts.outfit(
-                    color: _text, fontSize: 16, fontWeight: FontWeight.w700)),
+                    color: _text, fontSize: 16, fontWeight: FontWeight.w700,),),
             const SizedBox(height: 4),
             Text('A few words is enough — Chitti will bring it back up.',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 11.5)),
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11.5),),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
@@ -156,7 +156,7 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
                 fillColor: _bg,
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none),
+                    borderSide: BorderSide.none,),
               ),
               onSubmitted: (v) => Navigator.of(sheetContext).pop(v),
             ),
@@ -209,7 +209,7 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
         iconTheme: const IconThemeData(color: _text),
         title: Text('CM Presentation',
             style: GoogleFonts.outfit(
-                color: _text, fontWeight: FontWeight.w700, fontSize: 16)),
+                color: _text, fontWeight: FontWeight.w700, fontSize: 16,),),
         actions: [
           if (_stage >= 0)
             IconButton(
@@ -229,7 +229,7 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
         icon: const Icon(Icons.add_comment_rounded, size: 19),
         label: Text('He asked something',
             style: GoogleFonts.outfit(
-                fontSize: 12.5, fontWeight: FontWeight.w600)),
+                fontSize: 12.5, fontWeight: FontWeight.w600,),),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
@@ -268,10 +268,10 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
           children: [
             Text('He asked — waiting (${_pending.length})',
                 style: GoogleFonts.outfit(
-                    color: _purple, fontSize: 13, fontWeight: FontWeight.w700)),
+                    color: _purple, fontSize: 13, fontWeight: FontWeight.w700,),),
             const SizedBox(height: 3),
             Text('Finish the section you are on, then tap Ask.',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 11.5)),
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11.5),),
             const SizedBox(height: 10),
             for (final q in _pending) ...[
               Container(
@@ -288,7 +288,7 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
                         style: GoogleFonts.outfit(
                             color: _text,
                             fontSize: 13.5,
-                            fontWeight: FontWeight.w600)),
+                            fontWeight: FontWeight.w600,),),
                     const SizedBox(height: 9),
                     Row(
                       children: [
@@ -303,7 +303,7 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
                               foregroundColor: Colors.black,
                               padding: const EdgeInsets.symmetric(vertical: 9),
                               textStyle: GoogleFonts.outfit(
-                                  fontSize: 12, fontWeight: FontWeight.w600),
+                                  fontSize: 12, fontWeight: FontWeight.w600,),
                             ),
                           ),
                         ),
@@ -312,7 +312,7 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
                           onPressed: () => _markAnswered(q),
                           style: TextButton.styleFrom(foregroundColor: _muted),
                           child: Text('Done',
-                              style: GoogleFonts.outfit(fontSize: 12)),
+                              style: GoogleFonts.outfit(fontSize: 12),),
                         ),
                       ],
                     ),
@@ -398,7 +398,7 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
   Widget _closedCard() => Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-            color: _card, borderRadius: BorderRadius.circular(13)),
+            color: _card, borderRadius: BorderRadius.circular(13),),
         child: Text(
           'Closed politely. Tap the restart icon above to begin again.',
           style: GoogleFonts.outfit(color: _muted, fontSize: 12.5),
@@ -425,11 +425,11 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
           children: [
             Text(title,
                 style: GoogleFonts.outfit(
-                    color: _text, fontSize: 15, fontWeight: FontWeight.w700)),
+                    color: _text, fontSize: 15, fontWeight: FontWeight.w700,),),
             const SizedBox(height: 6),
             Text(body,
                 style: GoogleFonts.outfit(
-                    color: _muted, fontSize: 12.5, height: 1.45)),
+                    color: _muted, fontSize: 12.5, height: 1.45,),),
             const SizedBox(height: 13),
             SizedBox(
               width: double.infinity,
@@ -439,14 +439,14 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
                     _speaking
                         ? Icons.graphic_eq_rounded
                         : Icons.volume_up_rounded,
-                    size: 18),
+                    size: 18,),
                 label: Text(_speaking ? 'Chitti is speaking…' : buttonLabel),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: color,
                   foregroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),),
                 ),
               ),
             ),
@@ -461,7 +461,7 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
         children: [
           Text('Full script',
               style: GoogleFonts.outfit(
-                  color: _muted, fontSize: 12, fontWeight: FontWeight.w600)),
+                  color: _muted, fontSize: 12, fontWeight: FontWeight.w600,),),
           const SizedBox(height: 8),
           _scriptLine(ChittiCmPitch.intro, spoken: _stage >= 0),
           for (var i = 0; i < ChittiCmPitch.brief.length; i++)
@@ -485,21 +485,21 @@ class _AdminCmPresentationScreenState extends State<AdminCmPresentationScreen> {
                   const Padding(
                     padding: EdgeInsets.only(right: 6),
                     child: Icon(Icons.check_circle_rounded,
-                        color: _green, size: 14),
+                        color: _green, size: 14,),
                   ),
                 Expanded(
                   child: Text(s.label,
                       style: GoogleFonts.outfit(
                           color: spoken ? _green : _text,
                           fontSize: 12.5,
-                          fontWeight: FontWeight.w600)),
+                          fontWeight: FontWeight.w600,),),
                 ),
               ],
             ),
             const SizedBox(height: 5),
             Text(s.text(widget.languageCode),
                 style: GoogleFonts.outfit(
-                    color: _muted, fontSize: 11.5, height: 1.5)),
+                    color: _muted, fontSize: 11.5, height: 1.5,),),
           ],
         ),
       );

@@ -14,7 +14,6 @@
 // square, so this removes an unnecessary decision from the hero and
 // guarantees the saved image is exactly the QR with no stray
 // background/gaps, matching the "extra gaps crop pannu" request.
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -80,7 +79,6 @@ Future<Uint8List?> pickAndCropPaymentQr(BuildContext context) async {
         ),
         WebUiSettings(
           context: context,
-          presentStyle: WebPresentStyle.dialog,
         ),
       ],
     );

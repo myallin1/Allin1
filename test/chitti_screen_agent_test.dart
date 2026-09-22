@@ -9,9 +9,8 @@
 // these rules being right.
 //
 // Every test here is a thing that must NOT happen silently.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/services/chitti/chitti_screen_agent.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('free movement stays free — the point of the mode', () {

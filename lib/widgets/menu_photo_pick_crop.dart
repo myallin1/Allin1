@@ -45,7 +45,6 @@
 //   * IOSUiSettings is left untouched because this project ships
 //     Android APKs + web PWAs only; adding an unverified parameter
 //     there would risk another build break for zero benefit.
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -120,8 +119,6 @@ Future<MenuPhotoResult?> pickAndCropMenuPhoto(
 
     final cropped = await ImageCropper().cropImage(
       sourcePath: sourcePath,
-      compressFormat: ImageCompressFormat.jpg,
-      compressQuality: 90, // final size is still governed by uploadImageBytes()'s own budget-aware compressor
       // Always 1:1. Both shapes are square-bounded — a circle is drawn
       // INSIDE a square box, so one aspect ratio serves both, and the
       // stored bytes stay a normal square image in either case (a hard
@@ -151,7 +148,6 @@ Future<MenuPhotoResult?> pickAndCropMenuPhoto(
         ),
         WebUiSettings(
           context: context,
-          presentStyle: WebPresentStyle.dialog,
         ),
       ],
     );
@@ -261,7 +257,7 @@ class _ShapeOption extends StatelessWidget {
                 borderRadius: isCircle ? null : BorderRadius.circular(12),
               ),
               child: const Icon(Icons.restaurant_rounded,
-                  color: _kMenuPink, size: 24),
+                  color: _kMenuPink, size: 24,),
             ),
             const SizedBox(height: 10),
             Text(

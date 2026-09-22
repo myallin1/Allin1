@@ -9,12 +9,12 @@
 // surcharge the moment it names an amount, and becomes an excuse the
 // moment it is shown while the customer is still waiting. Those two
 // boundaries are what these tests hold.
-import 'package:flutter_test/flutter_test.dart';
 import 'package:erode_superapp/services/chitti/chitti_hero_voice.dart';
 import 'package:erode_superapp/services/tamil_transliteration.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('Chitti is the hero\'s dude', () {
+  group("Chitti is the hero's dude", () {
     test('every language gets a pep line', () {
       for (final lang in ['en', 'ta', 'tg']) {
         for (var seed = 0; seed < 8; seed++) {
@@ -56,7 +56,7 @@ void main() {
     test('but the SPOKEN Thanglish pep is Tamil, so it pronounces', () {
       expect(
         TamilTransliteration.hasTamil(
-          ChittiHeroVoice.spokenHeroPep('tg', seed: 0),
+          ChittiHeroVoice.spokenHeroPep('tg'),
         ),
         isTrue,
       );
@@ -134,7 +134,7 @@ void main() {
     test('no line names an amount', () {
       for (final l in lines) {
         expect(RegExp(r'₹\s*\d|\b\d+\s*%|\brupees?\s*\d').hasMatch(l), isFalse,
-            reason: l);
+            reason: l,);
       }
     });
 
@@ -147,7 +147,7 @@ void main() {
       }
     });
 
-    test('every line credits the hero\'s effort', () {
+    test("every line credits the hero's effort", () {
       for (final l in english) {
         final low = l.toLowerCase();
         expect(
@@ -170,7 +170,7 @@ void main() {
       expect(
         TamilTransliteration.hasTamil(
           ChittiHeroVoice.advocateForHero('ta',
-              moment: HeroMoment.completed)!,
+              moment: HeroMoment.completed,)!,
         ),
         isTrue,
       );
@@ -178,9 +178,9 @@ void main() {
 
     test('Thanglish customers get Latin, and hear Tamil', () {
       final shown = ChittiHeroVoice.advocateForHero('tg',
-          moment: HeroMoment.completed)!;
+          moment: HeroMoment.completed,)!;
       final spoken = ChittiHeroVoice.spokenAdvocateForHero('tg',
-          moment: HeroMoment.completed)!;
+          moment: HeroMoment.completed,)!;
       expect(TamilTransliteration.hasTamil(shown), isFalse, reason: shown);
       expect(TamilTransliteration.hasTamil(spoken), isTrue);
     });
@@ -189,7 +189,7 @@ void main() {
       expect(
         TamilTransliteration.hasTamil(
           ChittiHeroVoice.advocateForHero('en',
-              moment: HeroMoment.completed)!,
+              moment: HeroMoment.completed,)!,
         ),
         isFalse,
       );

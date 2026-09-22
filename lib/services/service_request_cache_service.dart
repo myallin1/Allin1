@@ -30,13 +30,14 @@ class ServiceRequestCacheService {
 
   static const _boxName = 'completed_service_requests';
 
-  static Future<Box> _box() async {
-    if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);
+  static Future<Box<dynamic>> _box() async {
+    if (Hive.isBoxOpen(_boxName)) return Hive.box<dynamic>(_boxName);
     // Same lazy self-init pattern as HiveCache/RecentPlacesService —
     // safe to call from any entrypoint, not just main_customer.dart.
     await Hive.initFlutter();
-    return Hive.openBox(_boxName);
+    return Hive.openBox<dynamic>(_boxName);
   }
+
 
   /// Persists a completed request's full data locally, keyed by its
   /// Firestore document id. Call this the moment the app observes
@@ -82,11 +83,12 @@ class ServiceRequestCacheService {
     try {
       final box = await _box();
       final entries = box.values
-          .whereType<Map>()
+          .whereType<Map<dynamic, dynamic>>()
           .map(Map<String, dynamic>.from)
           .where((e) =>
               requestType == null || e['requestType'] == requestType,)
           .toList();
+
       entries.sort((a, b) {
         final aTime = (a['createdAtMs'] as int?) ?? 0;
         final bTime = (b['createdAtMs'] as int?) ?? 0;
@@ -129,6 +131,7 @@ class ServiceRequestCacheService {
   }
 
   dynamic _sanitizeValue(value) {
+
     if (value is Map) {
       final map = <String, dynamic>{};
       value.forEach((k, v) {

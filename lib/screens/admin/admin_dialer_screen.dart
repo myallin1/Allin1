@@ -118,7 +118,7 @@ class _AdminDialerScreenState extends State<AdminDialerScreen>
     if (!mounted) return;
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result), duration: const Duration(seconds: 4)),
+      SnackBar(content: Text(result)),
     );
     await _refreshActiveCall();
   }
@@ -144,7 +144,7 @@ class _AdminDialerScreenState extends State<AdminDialerScreen>
         elevation: 0,
         iconTheme: const IconThemeData(color: _text),
         title: Text('Dialer',
-            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16)),
+            style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700, fontSize: 16),),
         actions: [
           // NEW (Sep 2 2026 — Nizam: "call summary pakka ovvoru time
           // admin app pogama dialer laye monitor pandramari varanum").
@@ -244,10 +244,10 @@ class _AdminDialerScreenState extends State<AdminDialerScreen>
               icon: _busy
                   ? const SizedBox(
                       width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),)
                   : const Icon(Icons.call_rounded),
               label: Text(_busy ? 'Calling…' : 'Call',
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 15)),
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 15),),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _green,
                 foregroundColor: Colors.black,
@@ -299,7 +299,7 @@ class _AdminDialerScreenState extends State<AdminDialerScreen>
                   ),
                 ),
                 Text(state,
-                    style: GoogleFonts.outfit(color: _green, fontSize: 11, fontWeight: FontWeight.w700)),
+                    style: GoogleFonts.outfit(color: _green, fontSize: 11, fontWeight: FontWeight.w700),),
               ],
             ),
             const SizedBox(height: 12),
@@ -852,7 +852,7 @@ class _ContactsTabState extends State<_ContactsTab> {
       return;
     }
     try {
-      final names = await FlutterContacts.getContacts(withProperties: false, withPhoto: false);
+      final names = await FlutterContacts.getContacts();
       names.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
       if (!mounted) return;
       setState(() => _contacts = names);
@@ -876,7 +876,7 @@ class _ContactsTabState extends State<_ContactsTab> {
       return;
     }
     final full = await FlutterContacts.getContact(c.id);
-    final phone = full?.phones.isNotEmpty == true ? full!.phones.first.number : null;
+    final phone = full?.phones.isNotEmpty ?? false ? full!.phones.first.number : null;
     if (phone != null) widget.onCall(phone);
   }
 
@@ -886,7 +886,7 @@ class _ContactsTabState extends State<_ContactsTab> {
     final q = _query.toLowerCase();
     return all.where((c) {
       if (c.displayName.toLowerCase().contains(q)) return true;
-      return c.phones.any((p) => p.number.replaceAll(RegExp(r'[^0-9]'), '').contains(q));
+      return c.phones.any((p) => p.number.replaceAll(RegExp('[^0-9]'), '').contains(q));
     }).toList();
   }
 
@@ -935,7 +935,7 @@ class _ContactsTabState extends State<_ContactsTab> {
                         ),
                       ),
                       title: Text(c.displayName,
-                          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w600, fontSize: 14)),
+                          style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w600, fontSize: 14),),
                       subtitle: phone != null
                           ? Text(phone, style: GoogleFonts.outfit(color: _muted, fontSize: 11.5))
                           : null,

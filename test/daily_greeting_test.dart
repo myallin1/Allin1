@@ -11,11 +11,11 @@
 // Chitti SPEAKS to them are deliberately different strings. Get that
 // backwards and the app still runs, still shows text, and simply
 // sounds broken to one third of its users.
-import 'package:flutter_test/flutter_test.dart';
 import 'package:erode_superapp/services/chitti/chitti_welcome_service.dart';
 import 'package:erode_superapp/services/daily_greeting_notification_service.dart';
 import 'package:erode_superapp/services/daily_quote_service.dart';
 import 'package:erode_superapp/services/tamil_transliteration.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('every language gets a real greeting', () {

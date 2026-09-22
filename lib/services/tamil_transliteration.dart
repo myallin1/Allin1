@@ -193,7 +193,7 @@ class TamilTransliteration {
       } else {
         out.write(_shouldVoice(c, prevConsonant, prevWasVowel)
             ? pair.$2
-            : pair.$1);
+            : pair.$1,);
       }
 
       // Does an inherent 'a' follow? Only if the next character is

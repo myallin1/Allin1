@@ -264,7 +264,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
   }
 
   Widget _buildChittiVoiceSettings() {
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -286,7 +286,7 @@ class _HeroSettingsScreenState extends State<HeroSettingsScreen> {
             borderRadius: BorderRadius.circular(12),
           ),
           child: const Icon(Icons.record_voice_over_rounded,
-              color: _pink, size: 22),
+              color: _pink, size: 22,),
         ),
         title: Text(
           'Voice & Tone',

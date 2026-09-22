@@ -275,7 +275,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
   }
 
   int get _totalScans => _codes.values
-      .fold<int>(0, (sum, m) => sum + ((m['scans'] as num?)?.toInt() ?? 0));
+      .fold<int>(0, (total, m) => total + ((m['scans'] as num?)?.toInt() ?? 0));
 
   // ── CSV export ───────────────────────────────────────────────────
   String _csvCell(String v) {
@@ -299,7 +299,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
         _csvCell(l.refCode),
         _csvCell(label),
         _csvCell(l.createdAt?.toIso8601String() ?? ''),
-      ].join(','));
+      ].join(','),);
     }
     final stamp = DateTime.now().toIso8601String().split('T').first;
     try {
@@ -343,7 +343,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2, color: _pink),
                   )
                 : const Icon(Icons.sync_rounded, color: _pink),
-            onPressed: _loading ? null : () => _syncIncremental(),
+            onPressed: _loading ? null : _syncIncremental,
           ),
           IconButton(
             tooltip: 'Export CSV (Excel / Sheets)',
@@ -355,7 +355,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
       body: RefreshIndicator(
         color: _pink,
         backgroundColor: _surface,
-        onRefresh: () => _syncIncremental(),
+        onRefresh: _syncIncremental,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -426,7 +426,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
           Text(
             'QR Funnel',
             style: GoogleFonts.outfit(
-                color: _text, fontSize: 15, fontWeight: FontWeight.w800),
+                color: _text, fontSize: 15, fontWeight: FontWeight.w800,),
           ),
           const SizedBox(height: 12),
           Row(
@@ -434,7 +434,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
               _stat('Link opens', '$_totalScans', Icons.qr_code_scanner_rounded),
               _stat('Signed up', '$signups', Icons.how_to_reg_rounded),
               _stat('Conversion', '${rate.toStringAsFixed(1)}%',
-                  Icons.trending_up_rounded),
+                  Icons.trending_up_rounded,),
             ],
           ),
           const SizedBox(height: 10),
@@ -473,7 +473,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
                 child: Text(
                   value,
                   style: GoogleFonts.outfit(
-                      color: _text, fontSize: 18, fontWeight: FontWeight.w800),
+                      color: _text, fontSize: 18, fontWeight: FontWeight.w800,),
                 ),
               ),
               const SizedBox(height: 2),
@@ -511,7 +511,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
           Text(
             'Per-QR performance',
             style: GoogleFonts.outfit(
-                color: _text, fontSize: 15, fontWeight: FontWeight.w800),
+                color: _text, fontSize: 15, fontWeight: FontWeight.w800,),
           ),
           const SizedBox(height: 4),
           Text(
@@ -533,7 +533,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                        horizontal: 8, vertical: 4,),
                     decoration: BoxDecoration(
                       color: _pink.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
@@ -541,7 +541,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
                     child: Text(
                       e.key,
                       style: GoogleFonts.robotoMono(
-                          color: _pink, fontSize: 11, fontWeight: FontWeight.w700),
+                          color: _pink, fontSize: 11, fontWeight: FontWeight.w700,),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -555,7 +555,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
                           style: GoogleFonts.outfit(
                               color: _text,
                               fontSize: 12,
-                              fontWeight: FontWeight.w700),
+                              fontWeight: FontWeight.w700,),
                         ),
                         Text(
                           type,
@@ -617,7 +617,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
           ),
           const SizedBox(height: 12),
           _chipRow('Role', ['all', 'customer', 'hero', 'seller'], _roleFilter,
-              (v) => setState(() => _roleFilter = v)),
+              (v) => setState(() => _roleFilter = v),),
           const SizedBox(height: 8),
           _chipRow(
             'Contact',
@@ -636,7 +636,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
           if (codeOptions.length > 1) ...[
             const SizedBox(height: 8),
             _chipRow('QR', codeOptions, _codeFilter,
-                (v) => setState(() => _codeFilter = v)),
+                (v) => setState(() => _codeFilter = v),),
           ],
         ],
       ),
@@ -655,7 +655,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
       children: [
         Text(title,
             style: GoogleFonts.outfit(
-                color: _muted, fontSize: 10, fontWeight: FontWeight.w700)),
+                color: _muted, fontSize: 10, fontWeight: FontWeight.w700,),),
         const SizedBox(height: 6),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -668,7 +668,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
                   onTap: () => onPick(v),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 7),
+                        horizontal: 12, vertical: 7,),
                     decoration: BoxDecoration(
                       color: on ? _pink : _card,
                       borderRadius: BorderRadius.circular(20),
@@ -729,7 +729,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
             child: Text(
               (l.name.isNotEmpty ? l.name[0] : '?').toUpperCase(),
               style: GoogleFonts.outfit(
-                  color: _pink, fontWeight: FontWeight.w800, fontSize: 14),
+                  color: _pink, fontWeight: FontWeight.w800, fontSize: 14,),
             ),
           ),
           const SizedBox(width: 12),
@@ -740,7 +740,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
                 Text(
                   l.name.isEmpty ? '(no name)' : l.name,
                   style: GoogleFonts.outfit(
-                      color: _text, fontSize: 13, fontWeight: FontWeight.w800),
+                      color: _text, fontSize: 13, fontWeight: FontWeight.w800,),
                 ),
                 const SizedBox(height: 3),
                 if (l.hasPhone)
@@ -760,7 +760,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
                     _tag(l.role, _pink),
                     if (l.refCode.isNotEmpty)
                       _tag(label.isEmpty ? l.refCode : '$label (${l.refCode})',
-                          _green),
+                          _green,),
                     if (l.city.isNotEmpty) _tag(l.city, _muted),
                   ],
                 ),
@@ -803,7 +803,7 @@ class _AdminAffiliateLeadsScreenState extends State<AdminAffiliateLeadsScreen> {
         child: Text(
           text,
           style: GoogleFonts.outfit(
-              color: color, fontSize: 9.5, fontWeight: FontWeight.w700),
+              color: color, fontSize: 9.5, fontWeight: FontWeight.w700,),
         ),
       );
 }

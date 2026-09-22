@@ -83,7 +83,7 @@ class VehicleSelectionBottomSheet extends StatefulWidget {
     properties.add(DiagnosticsProperty<Map<String, dynamic>?>('fares', fares));
     properties.add(ObjectFlagProperty<
             void Function(String vehicleType, double estimatedFare)>.has(
-        'onConfirm', onConfirm));
+        'onConfirm', onConfirm,),);
     properties.add(StringProperty('initialVehicleType', initialVehicleType));
   }
 }
@@ -271,7 +271,7 @@ class _VehicleSelectionBottomSheetState
                   child: ElevatedButton(
                     onPressed: () {
                       debugPrint(
-                          '🔥 [BUTTON CLICKED] Confirm Booking button was tapped!');
+                          '🔥 [BUTTON CLICKED] Confirm Booking button was tapped!',);
                       final fare =
                           _resolveFare(_selectedVehicle, widget.distanceKm);
                       widget.onConfirm(_selectedVehicle, fare);
@@ -385,10 +385,10 @@ class _VehicleSelectionBottomSheetState
                     gradient: isSelected
                         ? LinearGradient(colors: [
                             accentColor,
-                            accentColor.withValues(alpha: 0.8)
-                          ])
+                            accentColor.withValues(alpha: 0.8),
+                          ],)
                         : const LinearGradient(
-                            colors: [Color(0xFFFFEEF7), Colors.white]),
+                            colors: [Color(0xFFFFEEF7), Colors.white],),
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
@@ -419,7 +419,7 @@ class _VehicleSelectionBottomSheetState
                               BoxShadow(
                                   color: Colors.black.withValues(alpha: 0.18),
                                   blurRadius: 4,
-                                  offset: const Offset(0, 2)),
+                                  offset: const Offset(0, 2),),
                             ],
                           ),
                           child: ClipRRect(
@@ -428,10 +428,9 @@ class _VehicleSelectionBottomSheetState
                               photoUrl,
                               width: 28,
                               height: 28,
-                              fit: BoxFit.cover,
                               cacheWidth: 112,
                               errorWidget: Text(icon,
-                                  style: const TextStyle(fontSize: 20)),
+                                  style: const TextStyle(fontSize: 20),),
                             ),
                           ),
                         );
@@ -450,7 +449,7 @@ class _VehicleSelectionBottomSheetState
                         );
                       }
                       return Text(icon, style: const TextStyle(fontSize: 20));
-                    }),
+                    },),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -477,17 +476,17 @@ class _VehicleSelectionBottomSheetState
                           // Enhanced Price Display
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                                horizontal: 8, vertical: 4,),
                             decoration: BoxDecoration(
                               gradient: isSelected
                                   ? LinearGradient(colors: [
                                       accentColor,
-                                      accentColor.withValues(alpha: 0.8)
-                                    ])
+                                      accentColor.withValues(alpha: 0.8),
+                                    ],)
                                   : const LinearGradient(colors: [
                                       Color(0xFFFFEEF7),
-                                      Colors.white
-                                    ]),
+                                      Colors.white,
+                                    ],),
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(

@@ -87,7 +87,7 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
         iconTheme: const IconThemeData(color: _text),
         title: Text('My Day',
             style: GoogleFonts.outfit(
-                color: _text, fontWeight: FontWeight.w700, fontSize: 16)),
+                color: _text, fontWeight: FontWeight.w700, fontSize: 16,),),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addSheet,
@@ -96,7 +96,7 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
         icon: const Icon(Icons.add_rounded, size: 20),
         label: Text('Add',
             style: GoogleFonts.outfit(
-                fontSize: 13, fontWeight: FontWeight.w600)),
+                fontSize: 13, fontWeight: FontWeight.w600,),),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
@@ -133,10 +133,10 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
         child: Column(
           children: [
             const Icon(Icons.check_circle_outline_rounded,
-                color: _muted, size: 40),
+                color: _muted, size: 40,),
             const SizedBox(height: 12),
             Text('Nothing on the list.',
-                style: GoogleFonts.outfit(color: _text, fontSize: 15)),
+                style: GoogleFonts.outfit(color: _text, fontSize: 15),),
             const SizedBox(height: 5),
             Text(
               'Add something you need to come back to, and Chitti will '
@@ -157,10 +157,10 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
                     color: color,
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1)),
+                    letterSpacing: 1.1,),),
             const SizedBox(width: 7),
             Text('$count',
-                style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
+                style: GoogleFonts.outfit(color: _muted, fontSize: 11),),
           ],
         ),
       );
@@ -185,7 +185,7 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
               child: const Padding(
                 padding: EdgeInsets.all(4),
                 child: Icon(Icons.radio_button_unchecked_rounded,
-                    color: _muted, size: 22),
+                    color: _muted, size: 22,),
               ),
             ),
             const SizedBox(width: 10),
@@ -198,13 +198,13 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
                           color: _text,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          height: 1.3)),
+                          height: 1.3,),),
                   const SizedBox(height: 3),
                   Row(
                     children: [
                       Text(_when(c.dueAt),
                           style: GoogleFonts.outfit(
-                              color: overdue ? _amber : _muted, fontSize: 11.5)),
+                              color: overdue ? _amber : _muted, fontSize: 11.5,),),
                       if (c.timesAsked > 0) ...[
                         const SizedBox(width: 8),
                         Text(
@@ -248,7 +248,7 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
       PopupMenuItem<String>(
         value: value,
         child: Text(label,
-            style: GoogleFonts.outfit(color: _text, fontSize: 13)),
+            style: GoogleFonts.outfit(color: _text, fontSize: 13),),
       );
 
   Widget _doneTile(Commitment c) => Padding(
@@ -264,14 +264,14 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
                   style: GoogleFonts.outfit(
                       color: _muted,
                       fontSize: 13,
-                      decoration: TextDecoration.lineThrough)),
+                      decoration: TextDecoration.lineThrough,),),
             ),
             TextButton(
               onPressed: () => _service.reopen(c.id),
               style: TextButton.styleFrom(
-                  foregroundColor: _muted, minimumSize: Size.zero),
+                  foregroundColor: _muted, minimumSize: Size.zero,),
               child: Text('Undo',
-                  style: GoogleFonts.outfit(fontSize: 11.5)),
+                  style: GoogleFonts.outfit(fontSize: 11.5),),
             ),
           ],
         ),
@@ -297,14 +297,14 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheet) => Padding(
           padding: EdgeInsets.fromLTRB(
-              18, 18, 18, MediaQuery.of(sheetContext).viewInsets.bottom + 18),
+              18, 18, 18, MediaQuery.of(sheetContext).viewInsets.bottom + 18,),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('What do you need to come back to?',
                   style: GoogleFonts.outfit(
-                      color: _text, fontSize: 15.5, fontWeight: FontWeight.w700)),
+                      color: _text, fontSize: 15.5, fontWeight: FontWeight.w700,),),
               const SizedBox(height: 12),
               TextField(
                 controller: controller,
@@ -319,7 +319,7 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
                   fillColor: _bg,
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none),
+                      borderSide: BorderSide.none,),
                 ),
               ),
               const SizedBox(height: 12),
@@ -327,11 +327,11 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
                 spacing: 8,
                 children: [
                   _dueChip('In 1 hour', const Duration(hours: 1), due,
-                      (d) => setSheet(() => due = d)),
+                      (d) => setSheet(() => due = d),),
                   _dueChip('This evening', const Duration(hours: 4), due,
-                      (d) => setSheet(() => due = d)),
+                      (d) => setSheet(() => due = d),),
                   _dueChip('Tomorrow', const Duration(days: 1), due,
-                      (d) => setSheet(() => due = d)),
+                      (d) => setSheet(() => due = d),),
                 ],
               ),
               const SizedBox(height: 14),
@@ -364,7 +364,7 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(11)),
+                        borderRadius: BorderRadius.circular(11),),
                   ),
                   child: const Text('Add'),
                 ),
@@ -377,13 +377,13 @@ class _AdminMyDayScreenState extends State<AdminMyDayScreen> {
   }
 
   Widget _dueChip(String label, Duration offset, DateTime current,
-      ValueChanged<DateTime> onPick) {
+      ValueChanged<DateTime> onPick,) {
     final target = DateTime.now().add(offset);
-    final selected = (current.difference(target).inMinutes).abs() < 2;
+    final selected = current.difference(target).inMinutes.abs() < 2;
     return ChoiceChip(
       label: Text(label,
           style: GoogleFonts.outfit(
-              color: selected ? Colors.white : _muted, fontSize: 12)),
+              color: selected ? Colors.white : _muted, fontSize: 12,),),
       selected: selected,
       onSelected: (_) => onPick(target),
       backgroundColor: _bg,

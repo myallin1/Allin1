@@ -239,7 +239,7 @@ class _AdminOrdersCleanupScreenState extends State<AdminOrdersCleanupScreen>
             Text(time, style: GoogleFonts.outfit(color: _muted, fontSize: 11)),
             IconButton(
               icon: const Icon(Icons.delete_outline_rounded,
-                  color: Color(0xFFFF5252), size: 19),
+                  color: Color(0xFFFF5252), size: 19,),
               visualDensity: VisualDensity.compact,
               tooltip: 'Delete test order',
               onPressed: () => _deleteOne(r),

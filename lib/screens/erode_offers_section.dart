@@ -7,21 +7,20 @@
 // shop details, a Call button, and a Location button that opens
 // Google Maps in street-view mode at the shop's coordinates.
 // ================================================================
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter/services.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
-import 'package:cached_network_image/cached_network_image.dart';
-
+import '../models/mobile_models.dart' show youtubeVideoId;
 import '../services/cloudinary_upload_service.dart';
 import '../services/hive_cache.dart';
-import '../models/mobile_models.dart' show youtubeVideoId;
 import '../services/migration_gate_service.dart';
-import 'package:erode_superapp/widgets/cached_cloud_image.dart';
+import '../widgets/cached_cloud_image.dart';
 import '../widgets/premium_theme.dart';
 import 'mobiles/listing_video_player.dart' show ListingVideoPlayer;
 
@@ -286,7 +285,7 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
     await next;
   }
 
-  /// Cache-first offers load, gated on [rewardsVersion]. Sorting stays
+  /// Cache-first offers load, gated on [MigrationGateService.rewardsVersion]. Sorting stays
   /// client-side (newest first) — that was already required to avoid a
   /// composite index.
   Future<List<_OfferRecord>?> _loadOffers() async {
@@ -345,7 +344,7 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList()
       ..sort((a, b) => ((b['__createdAtMs'] as int?) ?? 0)
-          .compareTo((a['__createdAtMs'] as int?) ?? 0));
+          .compareTo((a['__createdAtMs'] as int?) ?? 0),);
 
     return records
         .map((m) => _OfferRecord(
@@ -353,7 +352,7 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
               data: Map<String, dynamic>.from(m)
                 ..remove('__id')
                 ..remove('__createdAtMs'),
-            ))
+            ),)
         .toList();
   }
 
@@ -528,7 +527,7 @@ class _ErodeOffersSectionState extends State<ErodeOffersSection> {
         child: Row(
           children: [
             const Icon(Icons.local_offer_rounded,
-                color: Colors.white, size: 26),
+                color: Colors.white, size: 26,),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -666,7 +665,6 @@ class _OfferCard extends StatefulWidget {
     this.onPlayTapped,
     this.onClosePlayer,
     this.onScrolledAway,
-    super.key,
   });
 
   @override
@@ -735,7 +733,6 @@ class _OfferCardState extends State<_OfferCard> {
     return Stack(
       children: [
         PremiumCard(
-          radius: kRadiusLg,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -753,12 +750,12 @@ class _OfferCardState extends State<_OfferCard> {
                   fit: StackFit.expand,
                   children: [
                       if (hasImage)
-                        Container(
+                        ColoredBox(
                           color: const Color(0xFFF3E7EF), // Neutral backing for letterbox bars
                           child: Image(
                             image: CachedNetworkImageProvider(
                               CloudinaryUploadService.optimizedUrl(imageUrl,
-                                  width: 720),
+                                  width: 720,),
                             ),
                             fit: BoxFit.contain, // Changed to contain to show full image
                             errorBuilder: (_, __, ___) => _posterFallback(offerPercent),
@@ -779,7 +776,7 @@ class _OfferCardState extends State<_OfferCard> {
                           left: 12,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 7),
+                                horizontal: 12, vertical: 7,),
                             decoration: BoxDecoration(
                               gradient: kBrandGradient,
                               borderRadius: BorderRadius.circular(kRadiusSm),
@@ -808,7 +805,7 @@ class _OfferCardState extends State<_OfferCard> {
                           right: 12,
                           child: IgnorePointer(
                             child: VideoGlowBadge(
-                                label: 'WATCH OFFER', compact: false),
+                                label: 'WATCH OFFER', compact: false,),
                           ),
                         ),
 
@@ -839,7 +836,7 @@ class _OfferCardState extends State<_OfferCard> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   const Icon(Icons.schedule_rounded,
-                                      color: Colors.white, size: 12),
+                                      color: Colors.white, size: 12,),
                                   const SizedBox(width: 5),
                                   Text(
                                     _formatValidTill(validTill),
@@ -867,7 +864,7 @@ class _OfferCardState extends State<_OfferCard> {
                     context,
                     MaterialPageRoute<void>(
                         builder: (_) =>
-                            OfferDetailScreen(offerId: offerId, data: data)),
+                            OfferDetailScreen(offerId: offerId, data: data),),
                   );
                 },
                 child: Padding(
@@ -882,7 +879,7 @@ class _OfferCardState extends State<_OfferCard> {
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.local_offer_rounded,
-                            color: kPremiumPink, size: 13),
+                            color: kPremiumPink, size: 13,),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -903,7 +900,7 @@ class _OfferCardState extends State<_OfferCard> {
                         ),
                       ),
                       Icon(Icons.arrow_forward_ios_rounded,
-                          color: context.premium.muted, size: 11),
+                          color: context.premium.muted, size: 11,),
                     ],
                   ),
                 ),
@@ -927,7 +924,7 @@ class _OfferCardState extends State<_OfferCard> {
                     context,
                     MaterialPageRoute<void>(
                         builder: (_) =>
-                            OfferDetailScreen(offerId: offerId, data: data)),
+                            OfferDetailScreen(offerId: offerId, data: data),),
                   );
                 },
               ),
@@ -944,7 +941,7 @@ class _OfferCardState extends State<_OfferCard> {
               behavior: HitTestBehavior.opaque,
               onTap: onPlayTapped,
               child: const VideoGlowBadge(
-                  label: 'WATCH OFFER', compact: false),
+                  label: 'WATCH OFFER', compact: false,),
             ),
           ),
         // FIX (Aug 31 2026 re-audit): the YoutubePlayer must NOT sit
@@ -970,7 +967,6 @@ class _OfferCardState extends State<_OfferCard> {
               children: [
                 YoutubePlayer(
                   controller: inlineController,
-                  aspectRatio: 16 / 9,
                 ),
                 // Close (X) — collapses back to the poster without
                 // throwing the controller out of the pool, so reopening
@@ -988,7 +984,7 @@ class _OfferCardState extends State<_OfferCard> {
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.close_rounded,
-                          color: Colors.white, size: 16),
+                          color: Colors.white, size: 16,),
                     ),
                   ),
                 ),
@@ -1268,4 +1264,3 @@ class OfferDetailScreen extends StatelessWidget {
     properties.add(DiagnosticsProperty<Map<String, dynamic>>('data', data));
   }
 }
-

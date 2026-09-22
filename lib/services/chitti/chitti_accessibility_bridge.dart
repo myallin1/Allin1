@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 
 import 'chitti_call_screening_service.dart';
+import 'chitti_followup_service.dart' show ChittiFollowUpService;
 
 class ChittiAccessibilityBridge {
   ChittiAccessibilityBridge._();
@@ -398,7 +399,7 @@ class ChittiAccessibilityBridge {
   /// the in-call screen can't show "recording" when the recorder failed
   /// to start (the microphone may already be held by speech
   /// recognition in full-conversation mode).
-  Future<bool> setCallRecording(bool enabled) async {
+  Future<bool> setCallRecording({required bool enabled}) async {
     try {
       final res = await _channel.invokeMethod<bool>('setCallRecording', {'enabled': enabled});
       return res ?? false;
@@ -414,7 +415,7 @@ class ChittiAccessibilityBridge {
   }
 
   /// The live Telecom call (number/state/speakerOn), or null when there
-  /// is none — distinct from [getActiveCallState], which reports the
+  /// is none — distinct from `getActiveCallState`, which reports the
   /// screening pipeline's own cached state.
   Future<Map<String, dynamic>?> getActiveCallInfo() async {
     try {

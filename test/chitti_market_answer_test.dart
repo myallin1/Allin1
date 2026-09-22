@@ -11,11 +11,10 @@
 // 2. The answer must be useful with no search at all — the PWA cannot
 //    reach DuckDuckGo (CORS), so the tiers and the enquiry have to
 //    stand on their own.
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:erode_superapp/services/chitti/chitti_enquiry_service.dart';
 import 'package:erode_superapp/services/chitti/chitti_market_answer_service.dart';
 import 'package:erode_superapp/services/chitti/chitti_web_search_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 Future<List<ChittiSearchResult>> _noResults(String _) async =>
     const <ChittiSearchResult>[];

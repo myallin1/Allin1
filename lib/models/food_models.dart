@@ -48,6 +48,17 @@ class SellerModel {
   // existed.
   final String city;
 
+  /// Partner shop onboarding fields:
+  /// 'nj_tech' = internal brand / company managed
+  /// 'external' = third-party partner shop (e.g. Signature Mobiles, local shops)
+  final String partnerType;
+  final double commissionPct;
+  final double deliveryRadiusKm;
+  final String? partnerAgreementAcceptedAt;
+  final String? shopLogoUrl;
+  final String? ownerName;
+  final String? agreementNotes;
+
   SellerModel({
     required this.id,
     required this.name,
@@ -68,6 +79,13 @@ class SellerModel {
     this.totalSettled = 0.0,
     this.walletBalance = 0.0,
     this.totalFeesDeducted = 0.0,
+    this.partnerType = 'nj_tech',
+    this.commissionPct = 0.0,
+    this.deliveryRadiusKm = 10.0,
+    this.partnerAgreementAcceptedAt,
+    this.shopLogoUrl,
+    this.ownerName,
+    this.agreementNotes,
   });
 
   factory SellerModel.fromJson(Map<String, dynamic> json) {
@@ -100,6 +118,13 @@ class SellerModel {
       totalSettled: (json['totalSettled'] as num?)?.toDouble() ?? 0.0,
       walletBalance: (json['walletBalance'] as num?)?.toDouble() ?? 0.0,
       totalFeesDeducted: (json['totalFeesDeducted'] as num?)?.toDouble() ?? 0.0,
+      partnerType: (json['partnerType'] as String?) ?? 'nj_tech',
+      commissionPct: (json['commissionPct'] as num?)?.toDouble() ?? 0.0,
+      deliveryRadiusKm: (json['deliveryRadiusKm'] as num?)?.toDouble() ?? 10.0,
+      partnerAgreementAcceptedAt: json['partnerAgreementAcceptedAt'] as String?,
+      shopLogoUrl: json['shopLogoUrl'] as String?,
+      ownerName: json['ownerName'] as String?,
+      agreementNotes: json['agreementNotes'] as String?,
     );
   }
 
@@ -149,6 +174,13 @@ class SellerModel {
       'totalSettled': totalSettled,
       'walletBalance': walletBalance,
       'totalFeesDeducted': totalFeesDeducted,
+      'partnerType': partnerType,
+      'commissionPct': commissionPct,
+      'deliveryRadiusKm': deliveryRadiusKm,
+      'partnerAgreementAcceptedAt': partnerAgreementAcceptedAt,
+      'shopLogoUrl': shopLogoUrl,
+      'ownerName': ownerName,
+      'agreementNotes': agreementNotes,
     };
   }
 

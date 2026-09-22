@@ -60,7 +60,7 @@ class _BrandedLoadingScreenState extends State<BrandedLoadingScreen>
                           radius: 0.9 + (val * 0.3),
                           colors: [
                             const Color(0xFFFF9933).withValues(alpha: 0.18), // Saffron
-                            Colors.white.withValues(alpha: 0.0),
+                            Colors.white.withValues(alpha: 0),
                           ],
                           stops: const [0.1, 1.0],
                         ),
@@ -75,7 +75,7 @@ class _BrandedLoadingScreenState extends State<BrandedLoadingScreen>
                           radius: 0.9 + ((1 - val) * 0.3),
                           colors: [
                             const Color(0xFF138808).withValues(alpha: 0.12), // Green
-                            Colors.white.withValues(alpha: 0.0),
+                            Colors.white.withValues(alpha: 0),
                           ],
                           stops: const [0.1, 1.0],
                         ),

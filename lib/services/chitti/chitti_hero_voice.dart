@@ -68,13 +68,13 @@ class ChittiHeroVoice {
   /// than as an instruction.
   static const List<({String en, String ta})> _heroPep = [
     (
-      en: "Boss, I am your dude — do not worry. Keep going, the earnings "
-          "will come.",
+      en: 'Boss, I am your dude — do not worry. Keep going, the earnings '
+          'will come.',
       ta: 'பாஸ், நான் உங்க தோஸ்த் — கவலைப்படாதீங்க. தொடர்ந்து போங்க, '
           'வருமானம் வரும்.',
     ),
     (
-      en: "Boss, treat the customer well today. That is what brings "
+      en: 'Boss, treat the customer well today. That is what brings '
           "tomorrow's trip.",
       ta: 'பாஸ், இன்னைக்கு வாடிக்கையாளரை நல்லா கவனிங்க — அதுதான் நாளைய '
           'டிரிப்பை கொண்டு வரும்.',
@@ -85,19 +85,19 @@ class ChittiHeroVoice {
           'பலன் தரும்.',
     ),
     (
-      en: "Boss, slow day? Do not lose heart. The road always pays back.",
+      en: 'Boss, slow day? Do not lose heart. The road always pays back.',
       ta: 'பாஸ், இன்னைக்கு வேலை குறைவா? மனசு தளராதீங்க — ரோடு எப்பவும் '
           'திருப்பி தரும்.',
     ),
     (
-      en: "Boss, you are earning well because people trust you. Keep "
-          "that trust.",
+      en: 'Boss, you are earning well because people trust you. Keep '
+          'that trust.',
       ta: 'பாஸ், மக்கள் நம்புறதாலதான் நீங்க நல்லா சம்பாதிக்கிறீங்க — '
           'அந்த நம்பிக்கையை காப்பாத்துங்க.',
     ),
     (
-      en: "Boss, I am watching your numbers so you do not have to worry "
-          "about them.",
+      en: 'Boss, I am watching your numbers so you do not have to worry '
+          'about them.',
       ta: 'பாஸ், உங்க கணக்கை நான் பாத்துக்கறேன் — நீங்க கவலைப்பட '
           'வேண்டாம்.',
     ),
@@ -107,8 +107,8 @@ class ChittiHeroVoice {
           'பதிலா யாரும் இல்ல.',
     ),
     (
-      en: "Boss, one good word to the customer and they will ask for you "
-          "next time.",
+      en: 'Boss, one good word to the customer and they will ask for you '
+          'next time.',
       ta: 'பாஸ், வாடிக்கையாளர்கிட்ட ஒரு நல்ல வார்த்தை — அடுத்த முறை '
           'உங்களையே கேட்பாங்க.',
     ),

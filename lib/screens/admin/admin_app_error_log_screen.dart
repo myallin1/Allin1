@@ -33,7 +33,11 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
   DateTime _selectedDate = DateTime.now();
   List<AppErrorLogEntry> _logs = [];
   bool _loading = true;
+  bool _useCloud = true; // true = Cloud (All 4 Apps), false = Local (This Device)
+  String _selectedVariant = 'all'; // 'all', 'customer', 'hero', 'seller', 'admin'
+  String _selectedCategory = 'all'; // 'all', 'crash', 'network', 'permission', 'ui', 'payment', 'location'
   String _selectedSeverityFilter = 'ALL';
+  bool? _filterResolved = false; // false = active, true = resolved, null = all
   final Set<String> _expandedIds = {};
 
   String get _dateStr =>
@@ -47,12 +51,40 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
 
   Future<void> _loadLogs() async {
     setState(() => _loading = true);
-    final entries = await AppErrorLogService.getLogsForDate(_dateStr);
+    List<AppErrorLogEntry> entries;
+    if (_useCloud) {
+      entries = await AppErrorLogService.fetchRemoteErrors(
+        appVariant: _selectedVariant,
+        category: _selectedCategory,
+        resolved: _filterResolved,
+      );
+    } else {
+      entries = await AppErrorLogService.getLogsForDate(_dateStr);
+    }
     if (!mounted) return;
     setState(() {
       _logs = entries;
       _loading = false;
     });
+  }
+
+  Future<void> _toggleResolved(AppErrorLogEntry entry) async {
+    final newStatus = !entry.resolved;
+    setState(() => entry.resolved = newStatus);
+    if (_useCloud) {
+      await AppErrorLogService.markRemoteResolved(entry.id, resolved: newStatus);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: newStatus ? _green : _amber,
+        content: Text(
+          newStatus ? 'Marked as Resolved' : 'Reopened as Active',
+          style: const TextStyle(color: Colors.black),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    _loadLogs();
   }
 
   void _changeDate(int dayDelta) {
@@ -91,11 +123,13 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: _card,
         title: Text(
-          'Clear all error logs?',
+          _useCloud ? 'Clear remote errors?' : 'Clear all local logs?',
           style: GoogleFonts.outfit(color: _text, fontWeight: FontWeight.w700),
         ),
         content: Text(
-          'This removes all local error records from this device. Cannot be undone.',
+          _useCloud
+              ? 'This deletes all remote error reports from Firestore.'
+              : 'This removes all local error records from this device. Cannot be undone.',
           style: GoogleFonts.outfit(color: _muted, fontSize: 13),
         ),
         actions: [
@@ -115,8 +149,46 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
       ),
     );
     if (ok ?? false) {
-      await AppErrorLogService.clearAll();
+      if (_useCloud) {
+        for (final item in _logs) {
+          await AppErrorLogService.deleteRemoteError(item.id);
+        }
+      } else {
+        await AppErrorLogService.clearAll();
+      }
       _loadLogs();
+    }
+  }
+
+  Color _variantColor(String v) {
+    switch (v.toLowerCase()) {
+      case 'customer':
+        return const Color(0xFF10B981); // Emerald
+      case 'hero':
+        return const Color(0xFF3B82F6); // Blue
+      case 'seller':
+        return const Color(0xFFF97316); // Orange
+      case 'admin':
+      default:
+        return _purple;
+    }
+  }
+
+  IconData _categoryIcon(String c) {
+    switch (c.toLowerCase()) {
+      case 'network':
+        return Icons.wifi_off_rounded;
+      case 'permission':
+        return Icons.security_rounded;
+      case 'ui':
+        return Icons.brush_rounded;
+      case 'payment':
+        return Icons.currency_rupee_rounded;
+      case 'location':
+        return Icons.location_off_rounded;
+      case 'crash':
+      default:
+        return Icons.bug_report_rounded;
     }
   }
 
@@ -216,7 +288,8 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
       ),
     );
 
-    final title = 'Fix: ${entry.errorMessage} on ${entry.screen}';
+    final title =
+        '[${entry.appVariant.toUpperCase()}] Fix: ${entry.errorMessage} on ${entry.screen}';
     final authLines = [
       if (entry.authEmail != null) '- **Auth Email**: `${entry.authEmail}`',
       if (entry.authUid != null) '- **Auth UID**: `${entry.authUid}`',
@@ -226,10 +299,14 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
 
     final description =
         'Automated bug report from Allin1 In-App Error Monitor:\n\n'
+        '- **App Flavor**: `${entry.appVariant.toUpperCase()}`\n'
+        '- **Category**: `${entry.category.toUpperCase()}`\n'
         '- **Screen**: `${entry.screen}`\n'
         '- **Severity**: `${entry.severity}`\n'
+        '- **Platform**: `${entry.osPlatform ?? 'mobile'}`\n'
         '- **App Version**: `${entry.appVersion}`\n'
         '- **Occurred at**: `${entry.timestamp}` (Repeated: ${entry.repeatCount}x)\n'
+        '- **Status**: `${entry.resolved ? 'RESOLVED' : 'ACTIVE'}`\n'
         '${authLines.isNotEmpty ? '$authLines\n' : ''}\n'
         '### Error Message\n```\n${entry.errorMessage}\n```\n\n'
         '### Stack Trace\n```\n${entry.stackTrace}\n```';
@@ -256,11 +333,26 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _selectedSeverityFilter == 'ALL'
-        ? _logs
-        : _logs
-            .where((l) => l.severity == _selectedSeverityFilter)
-            .toList();
+    final filtered = _logs.where((l) {
+      if (_selectedSeverityFilter != 'ALL' &&
+          l.severity != _selectedSeverityFilter) {
+        return false;
+      }
+      if (!_useCloud) {
+        if (_selectedVariant != 'all' &&
+            l.appVariant.toLowerCase() != _selectedVariant.toLowerCase()) {
+          return false;
+        }
+        if (_selectedCategory != 'all' &&
+            l.category.toLowerCase() != _selectedCategory.toLowerCase()) {
+          return false;
+        }
+        if (_filterResolved != null && l.resolved != _filterResolved) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
 
     return Scaffold(
       backgroundColor: _bg,
@@ -269,7 +361,7 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: _text),
         title: Text(
-          'In-App Error Log & Diagnostics',
+          _useCloud ? '4-App Cloud Error Monitor' : 'Local Device Error Log',
           style: GoogleFonts.outfit(
             color: _text,
             fontWeight: FontWeight.w700,
@@ -279,7 +371,7 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_sweep_outlined, color: _red),
-            tooltip: 'Clear all logs',
+            tooltip: _useCloud ? 'Clear remote errors' : 'Clear all local logs',
             onPressed: _logs.isEmpty ? null : _confirmClearAll,
           ),
           IconButton(
@@ -291,7 +383,10 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
       ),
       body: Column(
         children: [
-          _dateNavigator(),
+          _sourceAndStatusRow(),
+          _variantFilterRow(),
+          _categoryFilterRow(),
+          if (!_useCloud) _dateNavigator(),
           _summaryCard(),
           _filterChips(),
           Expanded(
@@ -308,12 +403,209 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
                         child: ListView.builder(
                           padding: const EdgeInsets.all(12),
                           itemCount: filtered.length,
-                          itemBuilder: (ctx, i) =>
-                              _errorCard(filtered[i]),
+                          itemBuilder: (ctx, i) => _errorCard(filtered[i]),
                         ),
                       ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _sourceAndStatusRow() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      color: _card,
+      child: Row(
+        children: [
+          InkWell(
+            onTap: () {
+              setState(() => _useCloud = true);
+              _loadLogs();
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: _useCloud ? _purple : _bg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _useCloud ? _purple : _border),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.cloud_sync_rounded,
+                    size: 13,
+                    color: _useCloud ? Colors.white : _muted,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Cloud (4 Apps)',
+                    style: GoogleFonts.outfit(
+                      color: _useCloud ? Colors.white : _muted,
+                      fontSize: 11,
+                      fontWeight:
+                          _useCloud ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: () {
+              setState(() => _useCloud = false);
+              _loadLogs();
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: !_useCloud ? _purple : _bg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: !_useCloud ? _purple : _border),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.phone_android_rounded,
+                    size: 13,
+                    color: !_useCloud ? Colors.white : _muted,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Local Device',
+                    style: GoogleFonts.outfit(
+                      color: !_useCloud ? Colors.white : _muted,
+                      fontSize: 11,
+                      fontWeight:
+                          !_useCloud ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Spacer(),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<bool?>(
+              value: _filterResolved,
+              dropdownColor: _card,
+              style: GoogleFonts.outfit(color: _text, fontSize: 11),
+              icon: const Icon(Icons.arrow_drop_down, color: _muted, size: 18),
+              items: const [
+                DropdownMenuItem(value: false, child: Text('Active Only')),
+                DropdownMenuItem(value: true, child: Text('Resolved Only')),
+                DropdownMenuItem(child: Text('All Statuses')),
+              ],
+              onChanged: (v) {
+                setState(() => _filterResolved = v);
+                _loadLogs();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _variantFilterRow() {
+    final variants = ['all', 'customer', 'hero', 'seller', 'admin'];
+    return Container(
+      color: _card,
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: variants.map((v) {
+            final isSelected = _selectedVariant == v;
+            final label = v == 'all' ? 'ALL APPS' : v.toUpperCase();
+            final color = v == 'all' ? _purple : _variantColor(v);
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ChoiceChip(
+                label: Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    fontSize: 10.5,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? Colors.white : _muted,
+                  ),
+                ),
+                selected: isSelected,
+                selectedColor: color,
+                backgroundColor: _bg,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(color: isSelected ? color : _border),
+                ),
+                onSelected: (_) {
+                  setState(() => _selectedVariant = v);
+                  _loadLogs();
+                },
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _categoryFilterRow() {
+    final categories = [
+      'all',
+      'crash',
+      'network',
+      'permission',
+      'ui',
+      'payment',
+      'location',
+    ];
+    return Container(
+      color: _card,
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: categories.map((c) {
+            final isSelected = _selectedCategory == c;
+            final label = c == 'all' ? 'ALL CATEGORIES' : c.toUpperCase();
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ChoiceChip(
+                avatar: c == 'all'
+                    ? null
+                    : Icon(
+                        _categoryIcon(c),
+                        size: 12,
+                        color: isSelected ? Colors.white : _muted,
+                      ),
+                label: Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    fontSize: 10,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? Colors.white : _muted,
+                  ),
+                ),
+                selected: isSelected,
+                selectedColor: _purple,
+                backgroundColor: _bg,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(color: isSelected ? _purple : _border),
+                ),
+                onSelected: (_) {
+                  setState(() => _selectedCategory = c);
+                  _loadLogs();
+                },
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -533,11 +825,83 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                if (entry.repeatCount > 1)
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color:
+                        _variantColor(entry.appVariant).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: _variantColor(entry.appVariant)
+                          .withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Text(
+                    entry.appVariant.toUpperCase(),
+                    style: GoogleFonts.outfit(
+                      color: _variantColor(entry.appVariant),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _bg,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: _border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _categoryIcon(entry.category),
+                        size: 11,
+                        color: _muted,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        entry.category.toUpperCase(),
+                        style: GoogleFonts.outfit(
+                          color: _muted,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: entry.resolved
+                        ? _green.withValues(alpha: 0.15)
+                        : _amber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    entry.resolved ? 'RESOLVED' : 'ACTIVE',
+                    style: GoogleFonts.outfit(
+                      color: entry.resolved ? _green : _amber,
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (entry.repeatCount > 1) ...[
+                  const SizedBox(width: 6),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: _purple.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(6),
@@ -546,11 +910,12 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
                       '${entry.repeatCount}x',
                       style: GoogleFonts.outfit(
                         color: _purple,
-                        fontSize: 10,
+                        fontSize: 9.5,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
+                ],
                 const Spacer(),
                 Text(
                   timeStr,
@@ -653,6 +1018,37 @@ class _AdminAppErrorLogScreenState extends State<AdminAppErrorLogScreen> {
                     style: GoogleFonts.outfit(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _toggleResolved(entry),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: entry.resolved ? _amber : _green,
+                    side: BorderSide(
+                      color: (entry.resolved ? _amber : _green)
+                          .withValues(alpha: 0.5),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: Icon(
+                    entry.resolved
+                        ? Icons.replay_rounded
+                        : Icons.check_circle_outline_rounded,
+                    size: 13,
+                  ),
+                  label: Text(
+                    entry.resolved ? 'Reopen' : 'Resolve',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),

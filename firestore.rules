@@ -215,6 +215,17 @@ service cloud.firestore {
     }
 
     // ==============================================================
+    // APP_ERROR_REPORTS COLLECTION (Cross-App Error Monitoring)
+    // ==============================================================
+    // Any authenticated session (including guest session) across customer,
+    // hero, seller, or admin apps may report an error. Only admin can read,
+    // list, query, or resolve them.
+    match /app_error_reports/{errorId} {
+      allow create: if isAuth();
+      allow read, list, update, delete: if isAdminAny();
+    }
+
+    // ==============================================================
     // AFFILIATE_CODES COLLECTION (Aug 12 2026 — Affiliate QR Generator)
     // ==============================================================
     // Admin creates/deletes codes (metadata: type/label/createdBy).
@@ -518,7 +529,10 @@ service cloud.firestore {
                    'rating', 'isOpen', 'estimatedPrepTimeMin', 'status',
                    'imageUrl', 'coverImageUrl', 'emoji', 'metadata',
                    'businessVertical', 'city', 'role', 'hours',
-                   'fcmToken', 'fcmTokenUpdatedAt', 'updatedAt'
+                   'fcmToken', 'fcmTokenUpdatedAt', 'updatedAt',
+                   'partnerType', 'commissionPct', 'deliveryRadiusKm',
+                   'partnerAgreementAcceptedAt', 'shopLogoUrl',
+                   'ownerName', 'agreementNotes'
                  ]))
         // Clause C: the seller's own ₹5 platform-fee debit
         // (advanceSellerStage → 'accepted'). Locked to EXACTLY that
@@ -650,6 +664,13 @@ service cloud.firestore {
         allow update: if isAdminAny() || isSellerOwner(sellerId);
         allow delete: if isAdminAny() || isSellerOwner(sellerId);
       }
+    }
+
+    // ==============================================================
+    // PARTNER_AGREEMENTS COLLECTION (Admin Partner Shop Onboarding)
+    // ==============================================================
+    match /partner_agreements/{agreementId} {
+      allow read, write: if isAdminAny();
     }
 
     // ==============================================================

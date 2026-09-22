@@ -8,13 +8,13 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../config/hero_service_access.dart';
-import '../../widgets/admin/hero_service_access_sheet.dart';
-import '../../config/city_config.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'admin_hero_details_screen.dart';
+import '../../config/city_config.dart';
+import '../../config/hero_service_access.dart';
 import '../../services/firestore_usage_tracking.dart';
+import '../../widgets/admin/hero_service_access_sheet.dart';
+import 'admin_hero_details_screen.dart';
 
 // ── Theme (matches admin dashboard) ────────────────────────────
 const Color _bg = Color(0xFF0A0A1A);
@@ -533,7 +533,7 @@ class _ApprovedHeroCard extends StatelessWidget {
                         ? 'Services'
                         : '$restrictedCount off',
                     style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w600),
+                        fontSize: 12, fontWeight: FontWeight.w600,),
                   ),
                 ),
               ),

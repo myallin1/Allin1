@@ -32,11 +32,11 @@
 //
 // All of it is offline: no key, no network, no tokens. The model, when
 // there is one, is funnier — this is the floor, not the ceiling.
-import '../../config/app_variant.dart';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../../config/app_variant.dart';
 import '../daily_quote_service.dart';
 
 class ChittiBuddy {
@@ -187,7 +187,7 @@ class ChittiBuddy {
   /// no comfort layer at all.
   static final RegExp _setbackTopic = RegExp(
     r'\b(cancel|cancelled|refund|failed|error|complaint|missing|lost|'
-    r"wrong|couldn't|could not|cannot|can't|unable|sorry|didn't|"
+    "wrong|couldn't|could not|cannot|can't|unable|sorry|didn't|"
     r'did not|went wrong|try again|no luck)\b|'
     '(ரத்து|தவறு|புகார்|கிடைக்கல)',
     caseSensitive: false,

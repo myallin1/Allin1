@@ -210,7 +210,7 @@ class AdminAiAuditTools {
       ..writeln('Aadhaar: ${aadhaar.isEmpty ? 'N/A' : aadhaar}  |  PAN: ${pan.isEmpty ? 'N/A' : pan}  |  License: ${license.isEmpty ? 'N/A' : license}')
       ..writeln(findings.isEmpty
           ? 'Findings: none — submission looks complete.'
-          : 'Findings:\n- ${findings.join('\n- ')}')
+          : 'Findings:\n- ${findings.join('\n- ')}',)
       ..write(recommendation);
 
     return KycReportResult(
@@ -282,7 +282,7 @@ class AdminAiAuditTools {
       ..writeln('Address: ${address.isEmpty ? 'N/A' : address}')
       ..writeln(findings.isEmpty
           ? 'Findings: none — submission looks complete.'
-          : 'Findings:\n- ${findings.join('\n- ')}')
+          : 'Findings:\n- ${findings.join('\n- ')}',)
       ..write(recommendation);
 
     return KycReportResult(
@@ -364,7 +364,7 @@ class AdminAiAuditTools {
       ..writeln('Aadhaar: ${aadhaar.isEmpty ? 'N/A' : aadhaar}  |  PAN: ${pan.isEmpty ? 'N/A' : pan}  |  License: ${license.isEmpty ? 'N/A' : license}')
       ..writeln(findings.isEmpty
           ? 'Findings: none — submission looks complete.'
-          : 'Findings:\n- ${findings.join('\n- ')}')
+          : 'Findings:\n- ${findings.join('\n- ')}',)
       ..write(recommendation);
 
     return KycReportResult(

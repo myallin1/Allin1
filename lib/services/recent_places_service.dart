@@ -31,13 +31,13 @@ class RecentPlacesService {
   /// for de-duplication (GPS/geocoder jitter is usually a few metres).
   static const _dedupeRadiusKm = 0.05;
 
-  static Future<Box> _box() async {
-    if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);
+  static Future<Box<dynamic>> _box() async {
+    if (Hive.isBoxOpen(_boxName)) return Hive.box<dynamic>(_boxName);
     // Same lazy self-init as HiveCache: only main_customer.dart calls
     // Hive.initFlutter() at startup, and initFlutter() is safe/idempotent
     // to call again from here so this stays usable from any entrypoint.
     await Hive.initFlutter();
-    return Hive.openBox(_boxName);
+    return Hive.openBox<dynamic>(_boxName);
   }
 
   Future<List<Map<String, dynamic>>> getRecentPlaces() async {
@@ -48,9 +48,10 @@ class RecentPlacesService {
         return const <Map<String, dynamic>>[];
       }
       return raw
-          .whereType<Map>()
+          .whereType<Map<dynamic, dynamic>>()
           .map(Map<String, dynamic>.from)
           .toList();
+
     } catch (e) {
       debugPrint('[RecentPlacesService] read error: $e');
       return const <Map<String, dynamic>>[];

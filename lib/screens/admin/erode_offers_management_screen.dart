@@ -8,8 +8,6 @@
 // Customer app reads these live via a StreamBuilder, so any change
 // here reflects immediately in the customer Rewards screen.
 // ================================================================
-import 'dart:typed_data';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -19,9 +17,9 @@ import 'package:latlong2/latlong.dart';
 
 import '../../models/mobile_models.dart' show isValidYoutubeUrl;
 import '../../services/cloudinary_upload_service.dart';
+import '../../services/firestore_usage_tracking.dart';
 import '../../widgets/video_link_field.dart';
 import '../location_picker_screen.dart';
-import '../../services/firestore_usage_tracking.dart';
 
 const Color _bg = Color(0xFF0F0B14);
 const Color _surface = Color(0xFF1B1524);
@@ -112,7 +110,7 @@ class AdminErodeOffersScreen extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: _surface,
         title: const Text('Publish offers to customers?',
-            style: TextStyle(color: _text, fontWeight: FontWeight.w800)),
+            style: TextStyle(color: _text, fontWeight: FontWeight.w800),),
         content: const Text(
           'Every customer will see the current offers — including any you '
           'removed — the next time their app checks, or straight away if '
@@ -127,7 +125,7 @@ class AdminErodeOffersScreen extends StatelessWidget {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: _pink, foregroundColor: Colors.white),
+                backgroundColor: _pink, foregroundColor: Colors.white,),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Publish'),
           ),
@@ -394,7 +392,7 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
     final picked = await Navigator.of(context).push<PickedLocation>(
       MaterialPageRoute<PickedLocation>(
         builder: (_) => LocationPickerScreen(
-          title: 'Pin the shop\'s location',
+          title: "Pin the shop's location",
           initialCenter: (_lat != null && _lng != null) ? LatLng(_lat!, _lng!) : null,
         ),
       ),
@@ -504,7 +502,6 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
               textColor: _text,
               mutedColor: Colors.white54,
               borderColor: Colors.white24,
-              accentColor: _pink,
             ),
             _locationPicker(),
           ],
@@ -541,9 +538,9 @@ class _OfferFormDialogState extends State<_OfferFormDialog> {
         ),
         alignment: Alignment.center,
         child: (_pickedImageBytes == null && (_imageUrl == null || _imageUrl!.isEmpty))
-            ? Column(
+            ? const Column(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   Icon(Icons.add_photo_alternate_rounded, color: Colors.white54, size: 28),
                   SizedBox(height: 6),
                   Text('Add shop photo', style: TextStyle(color: Colors.white54, fontSize: 12)),

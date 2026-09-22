@@ -53,7 +53,7 @@ class ChittiScreenGuide {
       ta: 'இது உங்க முதன்மை திரை. இங்க இன்னைக்கு எத்தனை ஆர்டர், '
           'எத்தனை பேர் அப்ரூவலுக்கு காத்திருக்காங்கனு தெரியும். '
           'மேல வலது பக்கம் மெனுவை அமுத்தினா மத்த எல்லா பகுதிக்கும் போகலாம்.',
-      en: 'This is your main screen. It shows today\'s orders and who is '
+      en: "This is your main screen. It shows today's orders and who is "
           'waiting for approval. The menu at the top right opens every '
           'other section.',
     ),

@@ -182,8 +182,8 @@ class _HeroDashboardShellState extends State<HeroDashboardShell> {
                     child: InkWell(
                       customBorder: const CircleBorder(),
                       onTap: () => Scaffold.of(context).openDrawer(),
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
+                      child: const Padding(
+                        padding: EdgeInsets.all(10),
                         child: Icon(Icons.menu_rounded, color: _pink, size: 24),
                       ),
                     ),

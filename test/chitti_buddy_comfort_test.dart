@@ -9,8 +9,8 @@
 // boundaries that matter -- it must fire on ordinary setbacks, and it
 // must NOT fire on true emergencies, where a canned warm line would
 // read as tone-deaf.
-import 'package:flutter_test/flutter_test.dart';
 import 'package:erode_superapp/services/chitti/chitti_buddy.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('comfort fires on an ordinary setback', () {

@@ -54,10 +54,10 @@ class ChittiChatHistoryService {
   /// at all.
   static const int maxSavedMessages = 300;
 
-  static Future<Box> _box() async {
-    if (Hive.isBoxOpen(_boxName)) return Hive.box(_boxName);
+  static Future<Box<dynamic>> _box() async {
+    if (Hive.isBoxOpen(_boxName)) return Hive.box<dynamic>(_boxName);
     await Hive.initFlutter();
-    return Hive.openBox(_boxName);
+    return Hive.openBox<dynamic>(_boxName);
   }
 
   /// True when there's a non-empty saved conversation waiting — used to
@@ -83,12 +83,13 @@ class ChittiChatHistoryService {
       final box = await _box();
       final raw = box.get(_messagesKey);
       if (raw is! List) return <Map<String, dynamic>>[];
-      return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      return raw.whereType<Map<dynamic, dynamic>>().map(Map<String, dynamic>.from).toList();
     } catch (e) {
       debugPrint('[ChittiChatHistoryService] loadSavedChat failed: $e');
       return <Map<String, dynamic>>[];
     }
   }
+
 
   /// Overwrites the saved conversation. Fire-and-forget by contract —
   /// wrap in `unawaited(...)`; a save failure must never block or
@@ -209,8 +210,8 @@ class ChittiChatHistoryService {
       await archiveCurrentAndStartNew();
 
       final msgs = (picked['messages'] as List?)
-              ?.whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
+              ?.whereType<Map<dynamic, dynamic>>()
+              .map(Map<String, dynamic>.from)
               .toList() ??
           <Map<String, dynamic>>[];
       await saveChat(msgs);
@@ -231,12 +232,12 @@ class ChittiChatHistoryService {
     }
   }
 
-  static List<Map<String, dynamic>> _readSessions(Box box) {
+  static List<Map<String, dynamic>> _readSessions(Box<dynamic> box) {
     final raw = box.get(_sessionsKey);
     if (raw is! List) return <Map<String, dynamic>>[];
     return raw
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
+        .whereType<Map<dynamic, dynamic>>()
+        .map(Map<String, dynamic>.from)
         .toList();
   }
 
@@ -289,12 +290,13 @@ class ChittiChatSession {
       title: (m['title'] as String?) ?? 'Chat with Chitti',
       savedAt: DateTime.tryParse((m['savedAt'] as String?) ?? ''),
       messages: (m['messages'] as List?)
-              ?.whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
+              ?.whereType<Map<dynamic, dynamic>>()
+              .map(Map<String, dynamic>.from)
               .toList() ??
           const <Map<String, dynamic>>[],
     );
   }
+
 
   final String title;
   final DateTime? savedAt;

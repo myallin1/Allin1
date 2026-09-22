@@ -143,7 +143,7 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
     return {'earnings': earnings, 'sessions': sessions};
   }
 
-  List<Map<String, dynamic>> _rowsOf(dynamic raw) =>
+  List<Map<String, dynamic>> _rowsOf(raw) =>
       (raw as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
   /// Coerce a cached numeric field to double WITHOUT asserting its type.
@@ -155,7 +155,7 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
   /// double are distinct and the cast throws — meaning this screen could
   /// be correct in the PWA and broken in the installed app from the same
   /// source line. Handles num, numeric String, and null.
-  static double _amountOf(dynamic value) {
+  static double _amountOf(value) {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value) ?? 0;
     return 0;
@@ -247,7 +247,7 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
           final netEarnings = earned - deducted;
 
           final totalOnlineMinutes = sessions.fold<double>(
-              0, (sum, r) => sum + _amountOf(r['durationMinutes']));
+              0, (acc, r) => acc + _amountOf(r['durationMinutes']),);
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
@@ -307,7 +307,7 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
                   'Tap Fetch once to reload from the server — if it stays '
                   'like this, report it.',
                   style: GoogleFonts.outfit(
-                      color: _muted, fontSize: 11.5, height: 1.4),
+                      color: _muted, fontSize: 11.5, height: 1.4,),
                 ),
               ],
               const SizedBox(height: 14),
@@ -323,7 +323,7 @@ class _HeroEarningsScreenState extends State<HeroEarningsScreen> {
               const SizedBox(height: 8),
               if (earnings.isEmpty)
                 Text('Nothing in this window.',
-                    style: GoogleFonts.outfit(color: _muted, fontSize: 12))
+                    style: GoogleFonts.outfit(color: _muted, fontSize: 12),)
               else
                 for (final r in earnings.take(50)) _earningRow(r),
             ],

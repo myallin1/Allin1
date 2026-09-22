@@ -28,7 +28,7 @@ import '../services/usage_tracking_service.dart';
 /// since each app (admin/hero/seller) only needs to promote itself,
 /// unlike the Customer sheet which offers a choice of Customer+Hero.
 class DownloadAppBanner extends StatelessWidget {
-  const DownloadAppBanner({super.key, required this.appVariant});
+  const DownloadAppBanner({required this.appVariant, super.key});
 
   /// 'admin' | 'hero' | 'seller' — matches UpdateService.fallbackApkUrl's
   /// switch cases.
