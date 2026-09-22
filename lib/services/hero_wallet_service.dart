@@ -188,37 +188,6 @@ class HeroWalletService {
     });
   }
 
-  // Token formula (per Nizam's "App Infra Cost Recovery" architecture):
-  // a minimal charge per minute the hero was actually Online (server
-  // presence writes, RTDB radar listeners, ping subscriptions -- all
-  // genuine infra load), plus a minimal charge per ride actually
-  // handled (dispatch + status-update + payment-settlement reads/
-  // writes). Both terms are strictly activity-driven, so zero activity
-  // produces exactly zero cost. Tune these two constants to match real
-  // observed Firestore/RTDB cost per hero -- they are the entire
-  // pricing model now, replacing RiderCommission for heroes.
-  // ================================================================
-  // RATES (retuned Aug 17 2026 — Nizam)
-  // ================================================================
-  // Target, in Nizam's words: "oru small ride ku 2 rupee range ku
-  // generate aganum, long rides ku five rupee aganum, but flat ah 2,5
-  // rupees agakudathu... 1.85, 2.10, 3.60 nu rupees and paise la
-  // generate aganum."
-  //
-  // So the requirement is not just a price level, it is that the price
-  // must LOOK computed — a metered amount ending in paise, not a tariff.
-  // That falls out naturally here because both inputs (km and billable
-  // minutes) are continuous: no rounding to whole rupees anywhere, only
-  // a final round to 2 decimal places.
-  //
-  // Worked examples with the constants below:
-  //   3 km,  15 min  -> 0.90 + 0.66 + 0.30 = ₹1.86
-  //   4 km,  18 min  -> 0.90 + 0.88 + 0.36 = ₹2.14
-  //   8 km,  25 min  -> 0.90 + 1.76 + 0.50 = ₹3.16
-  //  15 km,  45 min  -> 0.90 + 3.30 + 0.90 = ₹5.10
-  // Small rides land around ₹2, long rides around ₹5, and no two rides
-  // bill the same amount unless they were genuinely identical.
-  //
   // REPLACED (Sep 22 2026, per Nizam's explicit instruction — reversing
   // the Aug 11 2026 "NOT a percentage commission" decision recorded
   // above). The old activity-based model (minutes online + per-ride
@@ -334,6 +303,15 @@ class HeroWalletService {
 
     var rawCost = 0.0;
     for (final amount in orderAmounts) {
+      // FIX (Sep 22 2026 reaudit): an order with no real amount (0, or
+      // negative from a bad read) must contribute NOTHING, not the ₹2
+      // floor — the floor exists to cover infra cost for a genuine
+      // small order, not to charge a hero for an order this service
+      // never actually saw a value for (e.g. service_request_service.
+      // dart's finalAmount/estimatedAmount fallback chain landing on
+      // its final `?? 0.0`). Charging ₹2 for phantom data would violate
+      // this file's own "Zero Usage = Zero Cost" principle.
+      if (amount <= 0) continue;
       final perOrder = amount * usageFeeRate;
       rawCost += perOrder > usageFeeMinimum ? perOrder : usageFeeMinimum;
     }

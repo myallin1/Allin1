@@ -166,4 +166,26 @@ void main() {
         await firestore.collection('hero_wallets').doc(heroId).get();
     expect(wallet.exists, isFalse);
   });
+
+  // NEW (Sep 22 2026 reaudit): a 0/negative order amount (e.g. a bad
+  // read's `?? 0.0` fallback) must never be charged the ₹2 floor --
+  // that would silently bill a hero for an order this service never
+  // actually saw a real value for, violating "Zero Usage = Zero Cost".
+  test('flushUsageCost ignores zero/negative order amounts entirely',
+      () async {
+    final firestore = FakeFirebaseFirestore();
+    final service = HeroWalletService.test(firestore);
+
+    await service.flushUsageCost(heroId: heroId, orderAmounts: [0, -5]);
+    final wallet =
+        await firestore.collection('hero_wallets').doc(heroId).get();
+    expect(wallet.exists, isFalse);
+
+    // A real order in the SAME flush still bills correctly alongside
+    // the ignored zero/negative ones.
+    await service.flushUsageCost(heroId: heroId, orderAmounts: [0, 100, -5]);
+    final walletAfter =
+        await firestore.collection('hero_wallets').doc(heroId).get();
+    expect(walletAfter.data()!['balance'], -3.30);
+  });
 }
