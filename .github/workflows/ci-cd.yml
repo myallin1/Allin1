@@ -629,7 +629,13 @@ jobs:
     name: Publish Admin Test Build
     runs-on: ubuntu-latest
     needs: test
-    if: github.ref == 'refs/heads/main'
+    # FIX (Sep 2026 — test-build-before-merge workflow): was hard-gated
+    # to main only, so a manual workflow_dispatch run on a feature
+    # branch (e.g. to hand testers a build before merging) silently
+    # skipped this job with no error — confusing, since every other
+    # job in the run still executed. Manual dispatch from ANY branch
+    # now also qualifies; push-triggered runs still require main.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
     steps:
